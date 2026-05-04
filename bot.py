@@ -17,35 +17,42 @@ SYSTEM_PROMPT = """
 """
 
 def chat(user_id, text):
-    create_user(user_id)
-    reset_daily(user_id)
+    try:
+        # 🧠 إنشاء المستخدم
+        create_user(user_id)
+        reset_daily(user_id)
 
-    user = get_user(user_id)
-    vip = user[1]
-    count = user[2]
+        user = get_user(user_id)
+        vip = user[1]
+        count = user[2]
 
-    # 🔴 حد المستخدم المجاني
-    if vip == 0 and count >= FREE_LIMIT:
-        return "🚫 انتهى الحد المجاني اليوم. قم بالترقية إلى VIP للاستمرار."
+        # 🔴 الحد المجاني
+        if vip == 0 and count >= FREE_LIMIT:
+            return "🚫 انتهى الحد المجاني اليوم.\n💎 اشترك VIP للاستمرار بدون حدود."
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        *history(user_id),
-        {"role": "user", "content": text}
-    ]
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            *history(user_id),
+            {"role": "user", "content": text}
+        ]
 
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-        temperature=0.2
-    )
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            temperature=0.2
+        )
 
-    reply = response.choices[0].message.content.strip()
+        reply = response.choices[0].message.content.strip()
 
-    save(user_id, "user", text)
-    save(user_id, "assistant", reply)
+        # 💾 حفظ المحادثة
+        save(user_id, "user", text)
+        save(user_id, "assistant", reply)
 
-    if vip == 0:
-        increase_count(user_id)
+        # ➕ زيادة العداد
+        if vip == 0:
+            increase_count(user_id)
 
-    return reply
+        return reply
+
+    except Exception as e:
+        return "⚠️ حدث خطأ مؤقت، حاول مرة أخرى بعد قليل."
