@@ -1,10 +1,11 @@
 import logging
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
 from config import BOT_TOKEN
 from bot import chat
-from vision import analyze_image  # 🔥 تحليل الصور
+from vision import analyze_image
 
 logging.basicConfig(level=logging.INFO)
 
@@ -48,7 +49,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ حدث خطأ، حاول لاحقاً")
 
 # =========================
-# 📷 تحليل الصور الحقيقي
+# 📷 تحليل الصور (نسخة احترافية)
 # =========================
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -59,9 +60,17 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         image_path = "image.jpg"
         await file.download_to_drive(image_path)
 
-        await update.message.reply_text("📷 جاري تحليل الصورة بالذكاء الاصطناعي...")
+        # 🔥 يعطي إحساس فوري
+        await context.bot.send_chat_action(
+            chat_id=update.effective_chat.id,
+            action="typing"
+        )
 
-        result = analyze_image(image_path)
+        await update.message.reply_text("📷 جاري تحليل الصورة...")
+
+        # 🔥 يمنع تعليق البوت
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, analyze_image, image_path)
 
         await update.message.reply_text(f"🧠 النتيجة:\n\n{result}")
 
