@@ -18,17 +18,22 @@ SYSTEM_PROMPT = """
 
 def chat(user_id, text):
     try:
-        # 🧠 إنشاء المستخدم
+        # 🧠 إنشاء المستخدم إذا جديد
         create_user(user_id)
+
+        # 🔄 إعادة ضبط الحد اليومي
         reset_daily(user_id)
 
         user = get_user(user_id)
-        vip = user[1]
-        count = user[2]
+        vip = user[1]        # 0 = عادي / 1 = VIP
+        count = user[2]      # عدد الرسائل
 
-        # 🔴 الحد المجاني
+        # 🚫 منع المستخدم إذا تجاوز الحد
         if vip == 0 and count >= FREE_LIMIT:
             return "🚫 انتهى الحد المجاني اليوم.\n💎 اشترك VIP للاستمرار بدون حدود."
+
+        # 🧠 تحديد مستوى الذكاء حسب VIP
+        temp = 0.3 if vip else 0.2
 
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -39,7 +44,7 @@ def chat(user_id, text):
         response = client.chat.completions.create(
             model=MODEL,
             messages=messages,
-            temperature=0.2
+            temperature=temp
         )
 
         reply = response.choices[0].message.content.strip()
@@ -48,11 +53,11 @@ def chat(user_id, text):
         save(user_id, "user", text)
         save(user_id, "assistant", reply)
 
-        # ➕ زيادة العداد
+        # ➕ زيادة العداد للمستخدم العادي فقط
         if vip == 0:
             increase_count(user_id)
 
         return reply
 
     except Exception as e:
-        return "⚠️ حدث خطأ مؤقت، حاول مرة أخرى بعد قليل."
+        return "⚠️ حدث خطأ مؤقت، حاول مرة أخرى لاحقاً."
