@@ -18,7 +18,7 @@ def analyze_image(image_path):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "حلل الصورة واشرح المشكلة التقنية باختصار."},
+                        {"type": "text", "text": "حلل الصورة واذكر المشكلة التقنية."},
                         {
                             "type": "image_url",
                             "image_url": {
@@ -38,11 +38,12 @@ def analyze_image(image_path):
             timeout=30
         )
 
-        # 🔥 مهم جداً: كشف الخطأ الحقيقي
+        # 🔥 هنا أهم شيء
         if response.status_code != 200:
-            return f"API Error: {response.text}"
+            return f"❌ API ERROR:\n{response.text}"
 
-        return response.json()["choices"][0]["message"]["content"]
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
 
     except Exception as e:
-        return f"Exception: {str(e)}"
+        return f"❌ EXCEPTION:\n{str(e)}"
