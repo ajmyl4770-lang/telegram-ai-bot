@@ -1,49 +1,36 @@
-import base64
-import requests
-from config import OPENAI_API_KEY
+from PIL import Image
+import pytesseract
+from config import GROQ_API_KEY
+from groq import Groq
+
+client = Groq(api_key=GROQ_API_KEY)
 
 def analyze_image(image_path):
     try:
-        with open(image_path, "rb") as img:
-            base64_image = base64.b64encode(img.read()).decode("utf-8")
+        # 🧠 1) استخراج النص من الصورة (OCR)
+        image = Image.open(image_path)
+        text = pytesseract.image_to_string(image, lang="eng")
 
-        headers = {
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        if not text.strip():
+            text = "لا يوجد نص واضح في الصورة"
 
-        payload = {
-            "model": "gpt-4o-mini",
-            "messages": [
+        # 🧠 2) تحليل النص عبر Groq
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "أنت مساعد تقني تحلل محتوى الصور بشكل مبسط."
+                },
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "text", "text": "حلل الصورة واذكر المشكلة التقنية."},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
-                    ]
+                    "content": f"حلل محتوى الصورة التالي واشرحه:\n\n{text}"
                 }
             ],
-            "max_tokens": 300
-        }
-
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=30
+            temperature=0.5
         )
 
-        # 🔥 هنا أهم شيء
-        if response.status_code != 200:
-            return f"❌ API ERROR:\n{response.text}"
-
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
+        return response.choices[0].message.content.strip()
 
     except Exception as e:
-        return f"❌ EXCEPTION:\n{str(e)}"
+        return f"خطأ في تحليل الصورة: {str(e)}"
