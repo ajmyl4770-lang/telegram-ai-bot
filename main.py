@@ -4,11 +4,12 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 
 from config import BOT_TOKEN
 from bot import chat
+from vision import analyze_image  # 🔥 تحليل الصور
 
 logging.basicConfig(level=logging.INFO)
 
 # =========================
-# 🟢 أوامر نصية
+# 🟢 أوامر
 # =========================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -16,11 +17,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "💎 نظام VIP (Premium)\n\n"
+        "💎 نظام VIP\n\n"
         "- استخدام غير محدود\n"
         "- سرعة أعلى\n"
-        "- دعم تقني أفضل\n\n"
-        "للتفعيل تواصل مع الإدارة."
+        "- أولوية في الرد\n\n"
+        "للتفعيل تواصل مع الإدارة"
     )
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -44,10 +45,10 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(reply)
     except Exception as e:
         logging.error(e)
-        await update.message.reply_text("⚠️ خطأ، حاول لاحقاً")
+        await update.message.reply_text("⚠️ حدث خطأ، حاول لاحقاً")
 
 # =========================
-# 📷 تحليل الصور (مبدئي + جاهز للتطوير)
+# 📷 تحليل الصور الحقيقي
 # =========================
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -55,24 +56,18 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         photo = update.message.photo[-1]
         file = await photo.get_file()
 
-        file_path = "image.jpg"
-        await file.download_to_drive(file_path)
+        image_path = "image.jpg"
+        await file.download_to_drive(image_path)
 
-        await context.bot.send_chat_action(
-            chat_id=update.effective_chat.id,
-            action="typing"
-        )
+        await update.message.reply_text("📷 جاري تحليل الصورة بالذكاء الاصطناعي...")
 
-        # 🔥 هنا حالياً رد ذكي مبدئي (نربطه لاحقاً بـ AI Vision)
-        await update.message.reply_text(
-            "📷 تم استلام الصورة\n\n"
-            "🔍 لتحليلها بدقة:\n"
-            "اكتب لي ماذا يظهر في الصورة أو المشكلة الموجودة، وسأعطيك الحل مباشرة."
-        )
+        result = analyze_image(image_path)
+
+        await update.message.reply_text(f"🧠 النتيجة:\n\n{result}")
 
     except Exception as e:
         logging.error(e)
-        await update.message.reply_text("⚠️ حدث خطأ أثناء معالجة الصورة")
+        await update.message.reply_text("⚠️ فشل تحليل الصورة")
 
 # =========================
 # 🚀 تشغيل البوت
@@ -88,7 +83,7 @@ def main():
     app.add_handler(CommandHandler("vip", vip))
     app.add_handler(CommandHandler("stats", stats))
 
-    # رسائل نصية
+    # نص
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
 
     # 📷 صور
