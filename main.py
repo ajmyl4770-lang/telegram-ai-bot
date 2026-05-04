@@ -8,7 +8,7 @@ from bot import chat
 logging.basicConfig(level=logging.INFO)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 أهلاً بك في أبو جميل")
+    await update.message.reply_text("👋 أهلاً بك في نظام أبو جميل التقني")
 
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
@@ -21,10 +21,10 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(reply)
     except Exception as e:
         logging.error(e)
-        await update.message.reply_text("⚠️ خطأ")
+        await update.message.reply_text("⚠️ حدث خطأ، حاول مرة أخرى")
 
 def main():
-    print("🚀 BOT RUNNING")
+    print("🚀 ENTERPRISE BOT RUNNING")
 
     app = Application.builder().token(BOT_TOKEN).build()
 
