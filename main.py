@@ -96,7 +96,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("vip", vip))
     app.add_handler(CommandHandler("stats", stats))
-
+    app.add_handler(CommandHandler("makevip", make_vip))
     # نص
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
 
