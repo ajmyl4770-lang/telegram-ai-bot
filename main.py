@@ -24,7 +24,12 @@ async def vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- أولوية في الرد\n\n"
         "للتفعيل تواصل مع الإدارة"
     )
+from db import set_vip  # ضيفه فوق مع الاستيراد إذا مش موجود
 
+async def make_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    set_vip(user_id)
+    await update.message.reply_text("💎 تم تفعيل VIP لك")
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📊 البوت يعمل بشكل طبيعي")
 
