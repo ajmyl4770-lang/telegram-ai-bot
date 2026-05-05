@@ -1,13 +1,19 @@
 import sqlite3
 import time
 
+# =========================
+# اتصال قاعدة البيانات
+# =========================
 conn = sqlite3.connect("bot.db", check_same_thread=False)
 cur = conn.cursor()
 
 MAX_HISTORY = 12
 FREE_LIMIT = 20  # عدد الرسائل المجانية يوميًا
 
-# الرسائل
+# =========================
+# إنشاء الجداول
+# =========================
+
 cur.execute("""
 CREATE TABLE IF NOT EXISTS messages (
     user_id TEXT,
@@ -17,7 +23,6 @@ CREATE TABLE IF NOT EXISTS messages (
 )
 """)
 
-# المستخدمين
 cur.execute("""
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
@@ -30,6 +35,9 @@ CREATE TABLE IF NOT EXISTS users (
 conn.commit()
 
 # =========================
+# المستخدمين
+# =========================
+
 def create_user(user_id):
     cur.execute("SELECT user_id FROM users WHERE user_id=?", (user_id,))
     if not cur.fetchone():
@@ -58,6 +66,28 @@ def increase_count(user_id):
         (user_id,)
     )
     conn.commit()
+
+# =========================
+# VIP SYSTEM
+# =========================
+
+def set_vip(user_id):
+    cur.execute("UPDATE users SET vip=1 WHERE user_id=?", (user_id,))
+    conn.commit()
+
+def remove_vip(user_id):
+    cur.execute("UPDATE users SET vip=0 WHERE user_id=?", (user_id,))
+    conn.commit()
+
+def is_vip(user_id):
+    user = get_user(user_id)
+    if user:
+        return user[1] == 1
+    return False
+
+# =========================
+# الرسائل (ذاكرة المحادثة)
+# =========================
 
 def save(user_id, role, text):
     cur.execute(
