@@ -60,8 +60,10 @@ def reset_daily(user_id):
             (int(time.time()), user_id)
         )
         conn.commit()
-
 def increase_count(user_id):
+    if user_id == ADMIN_ID:
+        return  # 👑 أنت مستثنى
+
     cur.execute(
         "UPDATE users SET daily_count = daily_count + 1 WHERE user_id=?",
         (user_id,)
