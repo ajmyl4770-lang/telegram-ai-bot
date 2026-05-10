@@ -1,3 +1,4 @@
+ADMIN_ID = "1710957371"  # حط User ID حقك هنا
 import sqlite3
 import time
 
