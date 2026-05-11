@@ -1,81 +1,117 @@
-import os
-import io
-import requests
-from flask import Flask
-from threading import Thread
+import logging
+import asyncio
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
 
-# --- إعداد السيرفر الوهمي لإبقاء البوت مستيقظاً ---
-app = Flask('')
+from config import BOT_TOKEN
+from bot import chat
+from vision import analyze_image
 
-@app.route('/')
-def home():
-    return "I am alive!"
+logging.basicConfig(level=logging.INFO)
 
-def run():
-    app.run(host='0.0.0.0', port=8080)
+=========================
 
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
+🟢 أوامر
 
-# --- إعدادات التوكنات (سيتم جلبها من إعدادات Render) ---
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-HF_API_TOKEN = os.getenv("HF_API_TOKEN")
-HEADERS = {"Authorization": f"Bearer {HF_API_TOKEN}"}
+=========================
 
-# روابط النماذج
-MODELS = {
-    "image": "https://huggingface.co",
-    "video": "https://huggingface.co",
-    "music": "https://huggingface.co"
-}
-
-def query_hf(prompt, model_url):
-    try:
-        response = requests.post(model_url, headers=HEADERS, json={"inputs": prompt}, timeout=120)
-        if response.status_code == 200:
-            return response.content
-    except:
-        return None
-    return None
-
-# --- أوامر البوت ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 بوت الذكاء الاصطناعي الشامل يعمل!\n\nاستخدم الأوامر:\n/image [وصف]\n/video [وصف]\n/music [وصف]")
+await update.message.reply_text("👋 أهلاً بك في نظام أبو جميل التقني")
 
-async def image_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = " ".join(context.args)
-    if not prompt: return await update.message.reply_text("اكتب وصفاً للصورة")
-    await update.message.reply_text("🎨 جاري التصميم...")
-    result = query_hf(prompt, MODELS["image"])
-    if result: await update.message.reply_photo(photo=io.BytesIO(result))
-    else: await update.message.reply_text("❌ السيرفر مضغوط، حاول مجدداً")
+async def vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+await update.message.reply_text(
+"💎 نظام VIP\n\n"
+"- استخدام غير محدود\n"
+"- سرعة أعلى\n"
+"- أولوية في الرد\n\n"
+"للتفعيل تواصل مع الإدارة"
+)
+from db import set_vip  # ضيفه فوق مع الاستيراد إذا مش موجود
 
-async def music_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = " ".join(context.args)
-    if not prompt: return await update.message.reply_text("اكتب وصفاً للموسيقى")
-    await update.message.reply_text("🎵 جاري التأليف...")
-    result = query_hf(prompt, MODELS["music"])
-    if result: await update.message.reply_audio(audio=io.BytesIO(result), filename="music.mp3")
-    else: await update.message.reply_text("❌ فشل التوليد")
+async def make_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+user_id = str(update.effective_user.id)
+set_vip(user_id)
+await update.message.reply_text("💎 تم تفعيل VIP لك")
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+await update.message.reply_text("📊 البوت يعمل بشكل طبيعي")
 
-async def video_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    prompt = " ".join(context.args)
-    if not prompt: return await update.message.reply_text("اكتب وصفاً للفيديو")
-    await update.message.reply_text("🎬 جاري إنتاج الفيلم...")
-    result = query_hf(prompt, MODELS["video"])
-    if result: await update.message.reply_video(video=io.BytesIO(result))
-    else: await update.message.reply_text("❌ السيرفر مشغول حالياً")
+=========================
 
-# --- تشغيل البوت ---
-if __name__ == '__main__':
-    keep_alive() # تشغيل السيرفر الوهمي
-    bot = Application.builder().token(TELEGRAM_TOKEN).build()
-    bot.add_handler(CommandHandler("start", start))
-    bot.add_handler(CommandHandler("image", image_cmd))
-    bot.add_handler(CommandHandler("music", music_cmd))
-    bot.add_handler(CommandHandler("video", video_cmd))
-    print("Bot is running...")
-    bot.run_polling()
+💬 الرسائل النصية
+
+=========================
+
+async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+user_id = str(update.effective_user.id)
+text = update.message.text
+
+await context.bot.send_chat_action(  
+    chat_id=update.effective_chat.id,  
+    action="typing"  
+)  
+
+try:  
+    reply = chat(user_id, text)  
+    await update.message.reply_text(reply)  
+except Exception as e:  
+    logging.error(e)  
+    await update.message.reply_text("⚠️ حدث خطأ، حاول لاحقاً")
+
+=========================
+
+📷 تحليل الصور (نسخة احترافية)
+
+=========================
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+try:
+photo = update.message.photo[-1]
+file = await photo.get_file()
+
+image_path = "image.jpg"  
+    await file.download_to_drive(image_path)  
+
+    # 🔥 يعطي إحساس فوري  
+    await context.bot.send_chat_action(  
+        chat_id=update.effective_chat.id,  
+        action="typing"  
+    )  
+
+    await update.message.reply_text("📷 جاري تحليل الصورة...")  
+
+    # 🔥 يمنع تعليق البوت  
+    loop = asyncio.get_event_loop()  
+    result = await loop.run_in_executor(None, analyze_image, image_path)  
+
+    await update.message.reply_text(f"🧠 النتيجة:\n\n{result}")  
+
+except Exception as e:  
+    logging.error(e)  
+    await update.message.reply_text("⚠️ فشل تحليل الصورة")
+
+=========================
+
+🚀 تشغيل البوت
+
+=========================
+
+def main():
+print("🚀 BOT RUNNING")
+
+app = Application.builder().token(BOT_TOKEN).build()  
+
+# أوامر  
+app.add_handler(CommandHandler("start", start))  
+app.add_handler(CommandHandler("vip", vip))  
+app.add_handler(CommandHandler("stats", stats))  
+app.add_handler(CommandHandler("makevip", make_vip))  
+# نص  
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))  
+
+# 📷 صور  
+app.add_handler(MessageHandler(filters.PHOTO, handle_photo))  
+
+app.run_polling()
+
+if name == "main":
+main()وين
