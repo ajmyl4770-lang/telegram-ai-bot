@@ -13,6 +13,11 @@ bot = telebot.TeleBot(config.BOT_TOKEN)
 last_msg = {}
 
 # =========================
+# أوضاع المستخدم
+# =========================
+user_mode = {}
+
+# =========================
 # القائمة الرئيسية
 # =========================
 def main_menu():
@@ -114,92 +119,46 @@ def clear(message):
 
 
 # =========================
-# إنشاء صورة
+# وضع الصور
 # =========================
 @bot.message_handler(func=lambda m: m.text == "🖼️ صورة")
 def image_info(message):
 
+    user_id = str(message.chat.id)
+
+    user_mode[user_id] = "image"
+
     bot.reply_to(
         message,
-        "🖼️ أرسل:\n/img وصف الصورة"
+        "🖼️ اكتب وصف الصورة مباشرة"
     )
 
 
 # =========================
-# أغنية
+# وضع الأغاني
 # =========================
 @bot.message_handler(func=lambda m: m.text == "🎵 أغنية")
 def music_info(message):
 
-    bot.reply_to(
-        message,
-        "🎵 أرسل:\n/music فكرة الأغنية"
-    )
+    user_id = str(message.chat.id)
 
-
-# =========================
-# إنشاء صورة
-# =========================
-@bot.message_handler(commands=['img'])
-def img(message):
-
-    prompt = message.text.replace("/img", "").strip()
-
-    if not prompt:
-        bot.reply_to(
-            message,
-            "❌ اكتب وصف الصورة"
-        )
-        return
+    user_mode[user_id] = "music"
 
     bot.reply_to(
         message,
-        f"🎨 جاري إنشاء الصورة:\n\n{prompt}"
+        "🎵 اكتب فكرة الأغنية مباشرة"
     )
 
 
 # =========================
-# كتابة أغنية
-# =========================
-@bot.message_handler(commands=['music'])
-def music(message):
-
-    text = message.text.replace("/music", "").strip()
-
-    if not text:
-        bot.reply_to(
-            message,
-            "❌ اكتب فكرة الأغنية"
-        )
-        return
-
-    bot.send_chat_action(
-        message.chat.id,
-        "typing"
-    )
-
-    prompt = f"""
-اكتب أغنية عربية جميلة عن:
-{text}
-"""
-
-    history = [
-        {
-            "role": "user",
-            "content": prompt
-        }
-    ]
-
-    response = chat(history)
-
-    bot.reply_to(message, response)
-
-
-# =========================
-# الدردشة الذكية
+# دردشة
 # =========================
 @bot.message_handler(func=lambda m: m.text == "💬 دردشة")
 def ai_info(message):
+
+    user_id = str(message.chat.id)
+
+    user_mode[user_id] = "chat"
 
     bot.reply_to(
         message,
@@ -226,6 +185,7 @@ def handle(message):
         last_msg[user_id] = time.time()
 
         db.create_user(user_id)
+
         db.reset_daily(user_id)
 
         user = db.get_user(user_id)
@@ -244,6 +204,53 @@ def handle(message):
 
             return
 
+        # =========================
+        # وضع الأغاني
+        # =========================
+        if user_mode.get(user_id) == "music":
+
+            bot.send_chat_action(
+                message.chat.id,
+                "typing"
+            )
+
+            prompt = f"""
+اكتب أغنية عربية جميلة ومؤثرة عن:
+{message.text}
+"""
+
+            history = [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+
+            response = chat(history)
+
+            bot.reply_to(message, response)
+
+            user_mode[user_id] = None
+
+            return
+
+        # =========================
+        # وضع الصور
+        # =========================
+        if user_mode.get(user_id) == "image":
+
+            bot.reply_to(
+                message,
+                f"🎨 جاري إنشاء الصورة:\n\n{message.text}"
+            )
+
+            user_mode[user_id] = None
+
+            return
+
+        # =========================
+        # الدردشة العادية
+        # =========================
         history = db.history(user_id)
 
         history.append({
