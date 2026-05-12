@@ -206,34 +206,40 @@ def handle(message):
 
         # =========================
         # وضع الأغاني
-        # =========================
-        if user_mode.get(user_id) == "music":
+        # ======================        
+       if user_mode.get(user_id) == "music":
 
-            bot.send_chat_action(
-                message.chat.id,
-                "typing"
-            )
+    bot.send_chat_action(message.chat.id, "typing")
 
-            prompt = f"""
-اكتب أغنية عربية جميلة ومؤثرة عن:
+    prompt = f"""
+أنت كاتب أغاني عربي محترف.
+
+اكتب أغنية حقيقية بأسلوب شعبي / راب / عاطفي حسب الموضوع.
+
+الشروط:
+- لا مبالغة رومانسية
+- كلمات قوية وواقعية
+- قافية واضحة
+- 8 إلى 12 سطر
+
+الموضوع:
 {message.text}
 """
 
-            history = [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
+    history = [
+        {
+            "role": "user",
+            "content": prompt
+        }
+    ]
 
-            response = chat(history)
+    response = chat(history)
 
-            bot.reply_to(message, response)
+    bot.reply_to(message, response)
 
-            user_mode[user_id] = None
+    user_mode[user_id] = None
 
-            return
-
+    return
         # =========================
         # وضع الصور
         # =========================
