@@ -1,120 +1,30 @@
-import sqlite3
-import time
+@bot_instance.message_handler(func=lambda message: True)
+def handle(message):
+    user_id = str(message.chat.id)
 
-# =========================
-# إعدادات عامة
-# =========================
-ADMIN_ID = "1710957371"
-MAX_HISTORY = 12
-FREE_LIMIT = 20
+    try:
+        db.create_user(user_id)
+        db.reset_daily(user_id)
 
-# =========================
-# قاعدة البيانات
-# =========================
-conn = sqlite3.connect("bot.db", check_same_thread=False)
-cur = conn.cursor()
+        user = db.get_user(user_id)
+        if not user:
+            user = (user_id, 0, 0, 0)
 
-# =========================
-# إنشاء الجداول
-# =========================
-cur.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    user_id TEXT PRIMARY KEY,
-    vip INTEGER DEFAULT 0,
-    daily_count INTEGER DEFAULT 0,
-    last_reset INTEGER
-)
-""")
+        if not db.is_vip(user_id) and user[1] >= db.FREE_LIMIT:
+            bot_instance.reply_to(message, "❌ وصلت الحد اليومي.")
+            return
 
-cur.execute("""
-CREATE TABLE IF NOT EXISTS messages (
-    user_id TEXT,
-    role TEXT,
-    content TEXT,
-    timestamp INTEGER
-)
-""")
+        messages_history = db.history(user_id)
+        messages_history.append({"role": "user", "content": message.text})
 
-conn.commit()
+        response = chat(messages_history)
 
-# =========================
-# المستخدمين
-# =========================
+        db.save(user_id, "user", message.text)
+        db.save(user_id, "assistant", response)
+        db.increase_count(user_id)
 
-def create_user(user_id):
-    cur.execute("SELECT user_id FROM users WHERE user_id=?", (user_id,))
-    if not cur.fetchone():
-        cur.execute(
-            "INSERT INTO users (user_id, vip, daily_count, last_reset) VALUES (?, 0, 0, ?)",
-            (user_id, int(time.time()))
-        )
-        conn.commit()
+        bot_instance.reply_to(message, response)
 
-
-def get_user(user_id):
-    cur.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-    return cur.fetchone()
-
-
-def reset_daily(user_id):
-    user = get_user(user_id)
-    if not user:
-        return
-
-    # user[3] = last_reset
-    if time.time() - user[3] > 86400:
-        cur.execute(
-            "UPDATE users SET daily_count=0, last_reset=? WHERE user_id=?",
-            (int(time.time()), user_id)
-        )
-        conn.commit()
-
-
-def increase_count(user_id):
-    if str(user_id) == str(ADMIN_ID):
-        return
-
-    cur.execute(
-        "UPDATE users SET daily_count = daily_count + 1 WHERE user_id=?",
-        (user_id,)
-    )
-    conn.commit()
-
-
-def is_vip(user_id):
-    user = get_user(user_id)
-    return user and user[1] == 1
-
-
-def set_vip(user_id):
-    cur.execute("UPDATE users SET vip=1 WHERE user_id=?", (user_id,))
-    conn.commit()
-
-
-def remove_vip(user_id):
-    cur.execute("UPDATE users SET vip=0 WHERE user_id=?", (user_id,))
-    conn.commit()
-
-# =========================
-# الرسائل (ذاكرة البوت)
-# =========================
-
-def save(user_id, role, text):
-    cur.execute(
-        "INSERT INTO messages (user_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
-        (user_id, role, text, int(time.time()))
-    )
-    conn.commit()
-
-
-def history(user_id):
-    cur.execute(
-        "SELECT role, content FROM messages WHERE user_id=? ORDER BY rowid DESC LIMIT ?",
-        (user_id, MAX_HISTORY)
-    )
-    rows = cur.fetchall()
-
-    return [
-        {"role": r[0], "content": r[1]}
-        for r in reversed(rows)
-    ]
+    except Exception as e:
+        print("ERROR:", e)
+        bot_instance.reply_to(message, "⚠️ حصل خطأ مؤقت، حاول مرة ثانية.")
