@@ -1,4 +1,5 @@
 import telebot
+from telebot import types
 import config
 import database as db
 from ai import chat
@@ -7,38 +8,73 @@ import time
 bot = telebot.TeleBot(config.BOT_TOKEN)
 
 # =========================
+# منع السبام
+# =========================
+last_msg = {}
+
+# =========================
+# القائمة الرئيسية
+# =========================
+def main_menu():
+
+    markup = types.ReplyKeyboardMarkup(
+        resize_keyboard=True
+    )
+
+    btn1 = types.KeyboardButton("💬 دردشة")
+    btn2 = types.KeyboardButton("🖼️ صورة")
+    btn3 = types.KeyboardButton("🎵 أغنية")
+    btn4 = types.KeyboardButton("📊 إحصائياتي")
+    btn5 = types.KeyboardButton("🧹 مسح الذاكرة")
+
+    markup.add(btn1, btn2)
+    markup.add(btn3, btn4)
+    markup.add(btn5)
+
+    return markup
+
+
+# =========================
 # /start
 # =========================
 @bot.message_handler(commands=['start'])
 def start(message):
+
     user_id = str(message.chat.id)
 
     db.create_user(user_id)
 
+    text = """
+👋 أهلاً وسهلاً بك يا أبو جميل 🌟
+
+🤖 أنا مساعدك الذكي المتطور.
+
+📌 الخدمات المتاحة:
+
+💬 دردشة ذكية
+🖼️ إنشاء صور
+🎵 كتابة أغاني
+📊 عرض الإحصائيات
+🧹 مسح الذاكرة
+
+✨ اختر من الأزرار بالأسفل
+"""
+
     bot.send_message(
-    message.chat.id,
-    "👋 أهلاً وسهلاً بك يا أبو جميل 🌟\n\n"
-    "🤖 أنا مساعدك الذكي المتطور.\n"
-    "جاهز لمساعدتك في أي وقت.\n\n"
-
-    "📌 الأوامر المتاحة:\n\n"
-
-    "🖼️ /img → إنشاء صورة\n"
-    "🎵 /music → كتابة أغنية\n"
-    "🎬 /video → إنشاء فكرة فيديو\n"
-    "🧹 /clear → مسح المحادثة\n"
-    "📊 /stats → الإحصائيات\n\n"
-
-    "💡 فقط أرسل رسالتك وسأهتم بالباقي ✨"
-)
+        message.chat.id,
+        text,
+        reply_markup=main_menu()
+    )
 
 
 # =========================
-# /stats
+# الإحصائيات
 # =========================
-@bot.message_handler(commands=['stats'])
+@bot.message_handler(func=lambda m: m.text == "📊 إحصائياتي")
 def stats(message):
+
     user_id = str(message.chat.id)
+
     user = db.get_user(user_id)
 
     if not user:
@@ -57,56 +93,95 @@ def stats(message):
 
 
 # =========================
-# /clear
+# مسح الذاكرة
 # =========================
-@bot.message_handler(commands=['clear'])
+@bot.message_handler(func=lambda m: m.text == "🧹 مسح الذاكرة")
 def clear(message):
+
     user_id = str(message.chat.id)
 
     db.cur.execute(
         "DELETE FROM messages WHERE user_id=?",
         (user_id,)
     )
+
     db.conn.commit()
 
-    bot.reply_to(message, "🧹 تم مسح المحادثة بنجاح")
+    bot.reply_to(
+        message,
+        "✅ تم مسح المحادثة بنجاح"
+    )
 
 
 # =========================
-# /img
+# إنشاء صورة
+# =========================
+@bot.message_handler(func=lambda m: m.text == "🖼️ صورة")
+def image_info(message):
+
+    bot.reply_to(
+        message,
+        "🖼️ أرسل:\n/img وصف الصورة"
+    )
+
+
+# =========================
+# أغنية
+# =========================
+@bot.message_handler(func=lambda m: m.text == "🎵 أغنية")
+def music_info(message):
+
+    bot.reply_to(
+        message,
+        "🎵 أرسل:\n/music فكرة الأغنية"
+    )
+
+
+# =========================
+# إنشاء صورة
 # =========================
 @bot.message_handler(commands=['img'])
-def generate_image(message):
+def img(message):
+
     prompt = message.text.replace("/img", "").strip()
 
     if not prompt:
         bot.reply_to(
             message,
-            "🖼️ اكتب وصف الصورة بعد الأمر /img"
+            "❌ اكتب وصف الصورة"
         )
         return
 
     bot.reply_to(
         message,
-        f"🎨 جاري إنشاء صورة:\n{prompt}"
+        f"🎨 جاري إنشاء الصورة:\n\n{prompt}"
     )
 
 
 # =========================
-# /music
+# كتابة أغنية
 # =========================
 @bot.message_handler(commands=['music'])
 def music(message):
+
     text = message.text.replace("/music", "").strip()
 
     if not text:
         bot.reply_to(
             message,
-            "🎵 اكتب فكرة الأغنية بعد /music"
+            "❌ اكتب فكرة الأغنية"
         )
         return
 
-    prompt = f"اكتب كلمات أغنية عربية جميلة عن: {text}"
+    bot.send_chat_action(
+        message.chat.id,
+        "typing"
+    )
+
+    prompt = f"""
+اكتب أغنية عربية جميلة عن:
+{text}
+"""
 
     history = [
         {
@@ -121,29 +196,15 @@ def music(message):
 
 
 # =========================
-# /video
+# الدردشة الذكية
 # =========================
-@bot.message_handler(commands=['video'])
-def video(message):
-    prompt = message.text.replace("/video", "").strip()
-
-    if not prompt:
-        bot.reply_to(
-            message,
-            "🎬 اكتب وصف الفيديو بعد /video"
-        )
-        return
+@bot.message_handler(func=lambda m: m.text == "💬 دردشة")
+def ai_info(message):
 
     bot.reply_to(
         message,
-        f"🎬 ميزة الفيديو قيد التطوير.\n\nالوصف:\n{prompt}"
+        "💬 ارسل أي رسالة وسأرد عليك"
     )
-
-
-# =========================
-# منع السبام
-# =========================
-last_msg = {}
 
 
 # =========================
@@ -151,12 +212,14 @@ last_msg = {}
 # =========================
 @bot.message_handler(func=lambda message: True)
 def handle(message):
+
     user_id = str(message.chat.id)
 
     try:
 
         # منع السبام
         if user_id in last_msg:
+
             if time.time() - last_msg[user_id] < 2:
                 return
 
@@ -173,10 +236,12 @@ def handle(message):
         FREE_LIMIT = 20
 
         if not db.is_vip(user_id) and user[2] >= FREE_LIMIT:
+
             bot.reply_to(
                 message,
-                "❌ وصلت للحد اليومي (20 رسالة)"
+                "❌ وصلت الحد اليومي (20 رسالة)"
             )
+
             return
 
         history = db.history(user_id)
@@ -186,25 +251,47 @@ def handle(message):
             "content": message.text
         })
 
+        bot.send_chat_action(
+            message.chat.id,
+            "typing"
+        )
+
         try:
+
             response = chat(history)
+
         except Exception as e:
+
             print("AI ERROR:", e)
+
             response = "⚠️ حدث خطأ في الذكاء الاصطناعي"
 
-        db.save(user_id, "user", message.text)
-        db.save(user_id, "assistant", response)
+        db.save(
+            user_id,
+            "user",
+            message.text
+        )
+
+        db.save(
+            user_id,
+            "assistant",
+            response
+        )
 
         db.increase_count(user_id)
 
-        bot.reply_to(message, response)
+        bot.reply_to(
+            message,
+            response
+        )
 
     except Exception as e:
+
         print("ERROR:", e)
 
         bot.reply_to(
             message,
-            "⚠️ حدث خطأ مؤقت، حاول لاحقاً"
+            "⚠️ حدث خطأ مؤقت"
         )
 
 
@@ -213,4 +300,6 @@ def handle(message):
 # =========================
 print("🤖 Bot is running...")
 
-bot.infinity_polling(skip_pending=True)
+bot.infinity_polling(
+    skip_pending=True
+)
