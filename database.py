@@ -1,22 +1,13 @@
 import sqlite3
 import time
 
-# =========================
-# إعدادات
-# =========================
 ADMIN_ID = "1710957371"
 FREE_LIMIT = 20
 MAX_HISTORY = 12
 
-# =========================
-# قاعدة البيانات
-# =========================
 conn = sqlite3.connect("bot.db", check_same_thread=False)
 cur = conn.cursor()
 
-# =========================
-# إنشاء الجداول
-# =========================
 cur.execute("""
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
@@ -36,10 +27,6 @@ CREATE TABLE IF NOT EXISTS messages (
 """)
 
 conn.commit()
-
-# =========================
-# المستخدمين
-# =========================
 
 def create_user(user_id):
     cur.execute("SELECT user_id FROM users WHERE user_id=?", (user_id,))
@@ -94,9 +81,6 @@ def remove_vip(user_id):
     cur.execute("UPDATE users SET vip=0 WHERE user_id=?", (user_id,))
     conn.commit()
 
-# =========================
-# الرسائل (ذاكرة البوت)
-# =========================
 
 def save(user_id, role, text):
     cur.execute(
@@ -113,7 +97,4 @@ def history(user_id):
     )
     rows = cur.fetchall()
 
-    return [
-        {"role": r[0], "content": r[1]}
-        for r in reversed(rows)
-    ]
+    return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
