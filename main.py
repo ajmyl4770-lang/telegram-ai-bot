@@ -1,14 +1,14 @@
 import os
 import telebot
+from gtts import gTTS
+
 import config
 import database as db
 from ai import chat
-from gtts import gTTS
 
 bot = telebot.TeleBot(config.BOT_TOKEN)
 
 user_mode = {}
-user_style = {}
 
 
 # =========================
@@ -19,124 +19,139 @@ def start(message):
     user_id = str(message.chat.id)
     db.create_user(user_id)
 
-    bot.send_message(
-        message.chat.id,
-        "👋 أهلاً بك يا أبو جميل\n\n"
-        "🤖 بوت احترافي للأغاني والذكاء الاصطناعي\n\n"
-        "🎵 /music خليجي\n"
-        "🎵 /music مصري\n"
-        "🎵 /music يمني\n"
-        "🎵 /music شيلات\n"
-        "📊 /stats\n"
-        "🧹 /clear"
+    text = f"""
+👋 أهلاً وسهلاً بك يا {message.from_user.first_name or 'أبو جميل'} 🌟
+
+🤖 أنا مساعدك الذكي المتطور.
+
+📌 الخدمات:
+💬 دردشة
+🎵 /music
+🖼️ /img (قريباً)
+📊 /stats
+🧹 /clear
+
+✨ فقط اكتب رسالتك
+"""
+    bot.send_message(message.chat.id, text)
+
+
+# =========================
+# STATS
+# =========================
+@bot.message_handler(commands=['stats'])
+def stats(message):
+    user_id = str(message.chat.id)
+    user = db.get_user(user_id)
+
+    if not user:
+        bot.reply_to(message, "لا يوجد بيانات")
+        return
+
+    text = f"""
+📊 إحصائياتك:
+👤 ID: {user_id}
+💬 الرسائل: {user[2]}
+⭐ VIP: {'نعم' if user[1] else 'لا'}
+"""
+    bot.reply_to(message, text)
+
+
+# =========================
+# CLEAR
+# =========================
+@bot.message_handler(commands=['clear'])
+def clear(message):
+    user_id = str(message.chat.id)
+
+    db.cur.execute("DELETE FROM messages WHERE user_id=?", (user_id,))
+    db.conn.commit()
+
+    bot.reply_to(message, "🧹 تم مسح المحادثة")
+
+
+# =========================
+# MUSIC MODE
+# =========================
+@bot.message_handler(commands=['music'])
+def music_mode(message):
+    user_id = str(message.chat.id)
+    user_mode[user_id] = "music"
+
+    bot.reply_to(message,
+        "🎵 أرسل فكرة الأغنية الآن\n"
+        "مثال: اغنية حزينة عن الفراق أو حب"
     )
 
 
 # =========================
-# MUSIC SELECT STYLE
+# IMAGE (مستقبلاً)
 # =========================
-@bot.message_handler(commands=['music'])
-def music(message):
-    user_id = str(message.chat.id)
-
-    parts = message.text.split()
-
-    if len(parts) < 2:
-        bot.reply_to(message, "اكتب: /music خليجي أو مصري أو يمني أو شيلات")
-        return
-
-    style = parts[1].lower()
-
-    if style not in ["خليجي", "مصري", "يمني", "شيلات"]:
-        bot.reply_to(message, "اختر: خليجي / مصري / يمني / شيلات")
-        return
-
-    user_mode[user_id] = "music"
-    user_style[user_id] = style
-
-    bot.reply_to(message, f"🎵 اكتب فكرة الأغنية ({style}) الآن")
+@bot.message_handler(commands=['img'])
+def img(message):
+    bot.reply_to(message, "🖼️ ميزة الصور قيد التطوير")
 
 
 # =========================
-# MAIN HANDLER
+# MAIN CHAT HANDLER
 # =========================
 @bot.message_handler(func=lambda message: True)
 def handle(message):
     user_id = str(message.chat.id)
 
-    try:
-        db.create_user(user_id)
-        db.reset_daily(user_id)
+    db.create_user(user_id)
+    db.reset_daily(user_id)
 
-        mode = user_mode.get(user_id, "chat")
+    user = db.get_user(user_id)
+    if not user:
+        user = (user_id, 0, 0, 0)
 
-        # =========================
-        # MUSIC MODE
-        # =========================
-        if mode == "music":
+    # ============ MUSIC MODE ============
+    if user_mode.get(user_id) == "music":
 
-            style = user_style.get(user_id, "خليجي")
+        bot.send_chat_action(message.chat.id, "upload_audio")
 
-            bot.send_chat_action(message.chat.id, "upload_audio")
+        prompt = f"""
+أنت كاتب أغاني عربي محترف.
 
-            prompt = f"""
-اكتب أغنية عربية بأسلوب {style}
+اكتب أغنية راب أو شعبية قوية (8-12 سطر فقط)
 
-- 10 إلى 14 سطر
-- بدون تكرار
-- كلمات قوية وموسيقى راب أو شعبية
-- مناسبة لأسلوب {style}
+بدون مبالغة أو مدح زائد
 
 الموضوع:
 {message.text}
 """
 
+        try:
             lyrics = chat([{"role": "user", "content": prompt}])
 
-            # ===== صوت =====
-            voice_file = f"{user_id}_voice.mp3"
+            # ===== TTS =====
+            tts_file = f"{user_id}_voice.mp3"
             tts = gTTS(text=lyrics, lang="ar")
-            tts.save(voice_file)
+            tts.save(tts_file)
 
-            # ===== اختيار Beat =====
-            beat_map = {
-                "خليجي": "beats/gulf.mp3",
-                "مصري": "beats/egypt.mp3",
-                "يمني": "beats/yemen.mp3",
-                "شيلات": "beats/shilat.mp3"
-            }
+            # ===== SEND AUDIO =====
+            audio = open(tts_file, "rb")
 
-            beat_file = beat_map.get(style, "beats/gulf.mp3")
+            bot.send_audio(
+                message.chat.id,
+                audio,
+                title="🎵 AI Song",
+                caption="✨ تم إنشاء أغنية بالذكاء الاصطناعي"
+            )
 
-            output_file = f"{user_id}_final.mp3"
+            audio.close()
+            os.remove(tts_file)
 
-            # ===== دمج احترافي FFmpeg =====
-            os.system(f"""
-ffmpeg -y -i {beat_file} -i {voice_file} -filter_complex \
-"[1:a]volume=1.2[a1];[0:a][a1]amix=inputs=2:duration=longest" \
--b:a 192k {output_file}
-""")
+        except Exception as e:
+            print("MUSIC ERROR:", e)
+            bot.reply_to(message, "⚠️ حصل خطأ في إنشاء الأغنية")
 
-            # ===== إرسال =====
-            with open(output_file, "rb") as audio:
-                bot.send_audio(
-                    message.chat.id,
-                    audio,
-                    title=f"🎵 AI Song - {style}",
-                    caption="🔥 أغنية احترافية بالذكاء الاصطناعي"
-                )
+        user_mode[user_id] = None
+        return
 
-            # تنظيف
-            os.remove(voice_file)
-            os.remove(output_file)
-
-            user_mode[user_id] = None
-            user_style[user_id] = None
-            return
-
-        # =========================
-        # CHAT MODE
-        # =========================
+    # ============ NORMAL CHAT ============
+    try:
         history = db.history(user_id)
         history.append({"role": "user", "content": message.text})
 
@@ -144,13 +159,14 @@ ffmpeg -y -i {beat_file} -i {voice_file} -filter_complex \
 
         db.save(user_id, "user", message.text)
         db.save(user_id, "assistant", response)
+        db.increase_count(user_id)
 
         bot.reply_to(message, response)
 
     except Exception as e:
         print("ERROR:", e)
-        bot.reply_to(message, "⚠️ حصل خطأ")
+        bot.reply_to(message, "⚠️ خطأ مؤقت")
 
 
 print("🤖 Bot is running...")
-bot.infinity_polling()
+bot.polling()
