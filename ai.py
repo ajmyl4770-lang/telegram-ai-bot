@@ -5,7 +5,7 @@ client = Groq(api_key=GROQ_API_KEY)
 
 SYSTEM = {
     "role": "system",
-    "content": "أنت مساعد عربي ذكي، مختصر، احترافي، ولا تطيل."
+    "content": "أنت مساعد عربي ذكي مختصر وواضح."
 }
 
 def chat(messages):
