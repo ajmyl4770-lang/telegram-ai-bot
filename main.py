@@ -1,3 +1,5 @@
+from gtts import gTTS
+import os
 import telebot
 import time
 from telebot import types
@@ -104,24 +106,47 @@ def handle(m):
         # =========================
         if mode == "music":
 
-            bot.send_chat_action(m.chat.id, "typing")
+    bot.send_chat_action(message.chat.id, "upload_audio")
 
-            prompt = f"""
-اكتب أغنية عربية قوية بأسلوب راب أو شعبي.
+    prompt = f"""
+اكتب أغنية عربية قصيرة بأسلوب راب أو شعبي.
 
-8-12 سطر
-بدون مدح مبالغ فيه
+- 8 إلى 12 سطر
+- كلمات قوية
+- بدون تكرار
 
 الموضوع:
-{m.text}
+{message.text}
 """
 
-            res = chat([{"role": "user", "content": prompt}])
+    response = chat([{"role": "user", "content": prompt}])
 
-            bot.reply_to(m, res)
+    # =========================
+    # تحويل النص إلى صوت
+    # =========================
+    try:
+        tts = gTTS(text=response, lang="ar")
+        file_path = f"{uid}.mp3"
+        tts.save(file_path)
 
-            user_mode[uid] = None
-            return
+        audio = open(file_path, "rb")
+
+        bot.send_audio(
+            message.chat.id,
+            audio,
+            title="🎵 أغنيتك",
+            caption="🤖 تم إنشاؤها بواسطة البوت"
+        )
+
+        audio.close()
+        os.remove(file_path)
+
+    except Exception as e:
+        print("AUDIO ERROR:", e)
+        bot.reply_to(message, response)
+
+    user_mode[uid] = None
+    return
 
         # =========================
         # صورة (وصف فقط)
