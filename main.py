@@ -1,60 +1,122 @@
 import telebot
-from gtts import gTTS
-import os
-
 import config
 import database as db
 from ai import chat
+from gtts import gTTS
+from pydub import AudioSegment
+import os
 
 bot = telebot.TeleBot(config.BOT_TOKEN)
 
 user_mode = {}
 
-bot.remove_webhook()
-print("🤖 Bot is running...")
-
-
+# =========================
+# START
+# =========================
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "👋 أهلاً بك!")
+    user_id = str(message.chat.id)
+    db.create_user(user_id)
 
+    bot.send_message(message.chat.id,
+        f"""👋 أهلاً بك يا أبو جميل 🌟
 
+🤖 أنا مساعدك الذكي
+
+📌 الأوامر:
+🎵 /music
+💬 دردشة عادية
+📊 /stats
+🧹 /clear
+"""
+    )
+
+# =========================
+# MUSIC MODE
+# =========================
 @bot.message_handler(commands=['music'])
 def music(message):
     user_mode[str(message.chat.id)] = "music"
-    bot.reply_to(message, "🎵 اكتب فكرة الأغنية")
+    bot.reply_to(message, "🎵 اكتب فكرة الأغنية الآن (خليجي - مصري - يمني - شيلات)")
 
+# =========================
+# CLEAR
+# =========================
+@bot.message_handler(commands=['clear'])
+def clear(message):
+    user_id = str(message.chat.id)
+    db.cur.execute("DELETE FROM messages WHERE user_id=?", (user_id,))
+    db.conn.commit()
+    bot.reply_to(message, "🧹 تم المسح")
 
-@bot.message_handler(func=lambda m: True)
+# =========================
+# STATS
+# =========================
+@bot.message_handler(commands=['stats'])
+def stats(message):
+    user_id = str(message.chat.id)
+    user = db.get_user(user_id)
+
+    bot.reply_to(message,
+        f"""📊 إحصائياتك:
+💬 رسائل: {user[2]}
+⭐ VIP: {'نعم' if user[1] else 'لا'}"""
+    )
+
+# =========================
+# MAIN HANDLER
+# =========================
+@bot.message_handler(func=lambda message: True)
 def handle(message):
-    uid = str(message.chat.id)
+    user_id = str(message.chat.id)
+    text = message.text
 
-    if user_mode.get(uid) == "music":
+    db.create_user(user_id)
+    db.reset_daily(user_id)
 
-        try:
-            text = chat([{"role": "user", "content": message.text}])
+    mode = user_mode.get(user_id, "chat")
 
-            file = f"{uid}.mp3"
-            gTTS(text=text, lang="ar").save(file)
+    # ================= MUSIC =================
+    if mode == "music":
 
-            audio = open(file, "rb")
-            bot.send_audio(message.chat.id, audio)
+        bot.send_chat_action(message.chat.id, "upload_audio")
 
-            audio.close()
-            os.remove(file)
+        prompt = f"""
+اكتب أغنية عربية (8-12 سطر)
+أسلوب راب أو شعبي
+بدون مبالغة
 
-        except Exception as e:
-            print(e)
-            bot.reply_to(message, "⚠️ خطأ في إنشاء الصوت")
+الموضوع:
+{text}
+"""
 
-        user_mode[uid] = None
+        lyrics = chat([{"role": "user", "content": prompt}])
+
+        # صوت
+        tts = gTTS(lyrics, lang="ar")
+        voice_file = f"{user_id}.mp3"
+        tts.save(voice_file)
+
+        # إرسال مباشر بدون pydub (حل مشاكل السيرفر)
+        audio = open(voice_file, "rb")
+        bot.send_audio(message.chat.id, audio, title="🎵 AI Song")
+        audio.close()
+
+        os.remove(voice_file)
+        user_mode[user_id] = None
         return
 
-    try:
-        reply = chat([{"role": "user", "content": message.text}])
-        bot.reply_to(message, reply)
-    except:
-        bot.reply_to(message, "⚠️ خطأ مؤقت")
+    # ================= CHAT =================
+    history = db.history(user_id)
+    history.append({"role": "user", "content": text})
 
+    response = chat(history)
 
-bot.infinity_polling()
+    db.save(user_id, "user", text)
+    db.save(user_id, "assistant", response)
+    db.increase_count(user_id)
+
+    bot.reply_to(message, response)
+
+print("Bot Running...")
+bot.polling()
