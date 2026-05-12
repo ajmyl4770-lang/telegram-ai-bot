@@ -98,32 +98,39 @@ def handle(message):
             return
 
         mode = user_mode.get(user_id, "chat")
+if mode == "music":
 
-        if mode == "music":
+    bot.send_chat_action(message.chat.id, "typing")
 
-            bot.send_chat_action(message.chat.id, "typing")
+    prompt = f"""
+أنت كاتب أغاني عربي محترف (ليس شاعر عادي).
 
-            prompt = f"""
-أنت كاتب أغاني عربي محترف.
+اكتب أغنية حقيقية بأسلوب راب أو شعبي.
 
-اكتب أغنية قوية بأسلوب راب أو شعبي.
+⚠️ مهم جدًا:
+- لا تمدح الأشخاص بشكل عام أو مبالغ فيه
+- لا تستخدم عبارات مثل: "صديقي الحقيقي" أو "مكانة خاصة"
+- ركّز على قصة أو موقف أو شعور واقعي
+- لا تكرر الجمل
+- اجعلها 8 إلى 12 سطر فقط
+- بأسلوب قوي مثل أغاني الراب
 
-الشروط:
-- واقعية
-- قافية
-- 8 إلى 14 سطر
-
-الموضوع:
+موضوع الأغنية:
 {message.text}
 """
 
-            response = chat([{"role": "user", "content": prompt}])
+    try:
+        response = chat([{"role": "user", "content": prompt}])
+    except Exception as e:
+        print("MUSIC ERROR:", e)
+        response = "⚠️ حدث خطأ أثناء إنشاء الأغنية"
 
-            bot.reply_to(message, response)
+    bot.reply_to(message, response)
 
-            user_mode[user_id] = None
+    user_mode[user_id] = None
 
-            return
+    return
+        
 
         if mode == "image":
             bot.reply_to(message, f"🖼️ جاري إنشاء صورة: {message.text}")
