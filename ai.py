@@ -3,9 +3,17 @@ from config import GROQ_API_KEY, MODEL
 
 client = Groq(api_key=GROQ_API_KEY)
 
-
-def chat(messages):
+def chat(history):
     try:
+        messages = [
+            {
+                "role": "system",
+                "content": "أنت مساعد ذكي عربي، مختصر، واضح، وتجيب بدون إطالة."
+            }
+        ]
+
+        messages.extend(history)
+
         response = client.chat.completions.create(
             model=MODEL,
             messages=messages,
