@@ -1,117 +1,116 @@
-import logging
-import asyncio
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
-
-from config import BOT_TOKEN
-from bot import chat
-from vision import analyze_image
-
-logging.basicConfig(level=logging.INFO)
+import sqlite3
+import time
 
 =========================
 
-🟢 أوامر
+اتصال قاعدة البيانات
 
 =========================
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-await update.message.reply_text("👋 أهلاً بك في نظام أبو جميل التقني")
+conn = sqlite3.connect("bot.db", check_same_thread=False)
+cur = conn.cursor()
 
-async def vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
-await update.message.reply_text(
-"💎 نظام VIP\n\n"
-"- استخدام غير محدود\n"
-"- سرعة أعلى\n"
-"- أولوية في الرد\n\n"
-"للتفعيل تواصل مع الإدارة"
+MAX_HISTORY = 12
+FREE_LIMIT = 20  # عدد الرسائل المجانية يوميًا
+
+=========================
+
+إنشاء الجداول
+
+=========================
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS messages (
+user_id TEXT,
+role TEXT,
+content TEXT,
+timestamp INTEGER
 )
-from db import set_vip  # ضيفه فوق مع الاستيراد إذا مش موجود
+""")
 
-async def make_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
-user_id = str(update.effective_user.id)
-set_vip(user_id)
-await update.message.reply_text("💎 تم تفعيل VIP لك")
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-await update.message.reply_text("📊 البوت يعمل بشكل طبيعي")
+cur.execute("""
+CREATE TABLE IF NOT EXISTS users (
+user_id TEXT PRIMARY KEY,
+vip INTEGER DEFAULT 0,
+daily_count INTEGER DEFAULT 0,
+last_reset INTEGER
+)
+""")
 
-=========================
-
-💬 الرسائل النصية
-
-=========================
-
-async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-user_id = str(update.effective_user.id)
-text = update.message.text
-
-await context.bot.send_chat_action(  
-    chat_id=update.effective_chat.id,  
-    action="typing"  
-)  
-
-try:  
-    reply = chat(user_id, text)  
-    await update.message.reply_text(reply)  
-except Exception as e:  
-    logging.error(e)  
-    await update.message.reply_text("⚠️ حدث خطأ، حاول لاحقاً")
+conn.commit()
 
 =========================
 
-📷 تحليل الصور (نسخة احترافية)
+المستخدمين
 
 =========================
 
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-try:
-photo = update.message.photo[-1]
-file = await photo.get_file()
+def create_user(user_id):
+cur.execute("SELECT user_id FROM users WHERE user_id=?", (user_id,))
+if not cur.fetchone():
+cur.execute(
+"INSERT INTO users VALUES (?, 0, 0, ?)",
+(user_id, int(time.time()))
+)
+conn.commit()
 
-image_path = "image.jpg"  
-    await file.download_to_drive(image_path)  
+def get_user(user_id):
+cur.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
+return cur.fetchone()
 
-    # 🔥 يعطي إحساس فوري  
-    await context.bot.send_chat_action(  
-        chat_id=update.effective_chat.id,  
-        action="typing"  
-    )  
+def reset_daily(user_id):
+user = get_user(user_id)
+if user and time.time() - user[3] > 86400:
+cur.execute(
+"UPDATE users SET daily_count=0, last_reset=? WHERE user_id=?",
+(int(time.time()), user_id)
+)
+conn.commit()
 
-    await update.message.reply_text("📷 جاري تحليل الصورة...")  
-
-    # 🔥 يمنع تعليق البوت  
-    loop = asyncio.get_event_loop()  
-    result = await loop.run_in_executor(None, analyze_image, image_path)  
-
-    await update.message.reply_text(f"🧠 النتيجة:\n\n{result}")  
-
-except Exception as e:  
-    logging.error(e)  
-    await update.message.reply_text("⚠️ فشل تحليل الصورة")
+def increase_count(user_id):
+cur.execute(
+"UPDATE users SET daily_count = daily_count + 1 WHERE user_id=?",
+(user_id,)
+)
+conn.commit()
 
 =========================
 
-🚀 تشغيل البوت
+VIP SYSTEM
 
 =========================
 
-def main():
-print("🚀 BOT RUNNING")
+def set_vip(user_id):
+cur.execute("UPDATE users SET vip=1 WHERE user_id=?", (user_id,))
+conn.commit()
 
-app = Application.builder().token(BOT_TOKEN).build()  
+def remove_vip(user_id):
+cur.execute("UPDATE users SET vip=0 WHERE user_id=?", (user_id,))
+conn.commit()
 
-# أوامر  
-app.add_handler(CommandHandler("start", start))  
-app.add_handler(CommandHandler("vip", vip))  
-app.add_handler(CommandHandler("stats", stats))  
-app.add_handler(CommandHandler("makevip", make_vip))  
-# نص  
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))  
+def is_vip(user_id):
+user = get_user(user_id)
+if user:
+return user[1] == 1
+return False
 
-# 📷 صور  
-app.add_handler(MessageHandler(filters.PHOTO, handle_photo))  
+=========================
 
-app.run_polling()
+الرسائل (ذاكرة المحادثة)
 
-if name == "main":
-main()وين
+=========================
+
+def save(user_id, role, text):
+cur.execute(
+"INSERT INTO messages VALUES (?, ?, ?, ?)",
+(user_id, role, text, int(time.time()))
+)
+conn.commit()
+
+def history(user_id):
+cur.execute(
+"SELECT role, content FROM messages WHERE user_id=? ORDER BY rowid DESC LIMIT ?",
+(user_id, MAX_HISTORY)
+)
+rows = cur.fetchall()
+return [{"role": r[0], "content": r[1]} for r in reversed(rows
