@@ -1,6 +1,3 @@
-python-telegram-bot==21.1.1
+pyTelegramBotAPI
 groq
-requests
-python-dotenv
-pytesseract
-Pillow
+
