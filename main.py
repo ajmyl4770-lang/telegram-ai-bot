@@ -1,109 +1,38 @@
-import logging
-import asyncio
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+import os
+import telebot
+import bot  # استيراد ملف bot.py ككامل
 
-from config import BOT_TOKEN
-from bot import chat
-from vision import analyze_image
+# جلب المفاتيح من متغيرات البيئة في Railway بأمان
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-logging.basicConfig(level=logging.INFO)
+# تهيئة البوت
+bot_instance = telebot.TeleBot(BOT_TOKEN)
 
-# =========================
-# 🟢 أوامر
-# =========================
+# دالة التعامل مع الرسائل
+@bot_instance.message_handler(commands=['start'])
+def send_welcome(message):
+    user_id = str(message.chat.id)
+    bot.create_user(user_id) # استخدام دالة من ملف bot.py
+    bot_instance.reply_to(message, "مرحباً بك في البوت! أنا جاهز لمساعدتك.")
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 أهلاً بك في نظام أبو جميل التقني")
+@bot_instance.message_handler(func=lambda message: True)
+def handle_message(message):
+    user_id = str(message.chat.id)
+    
+    # التحقق من المستخدم واليوم
+    bot.reset_daily(user_id)
+    
+    # مثال لاستخدام الدوال التي في bot.py
+    # هنا يمكنك إضافة منطق الاتصال بـ Groq باستخدام GROQ_API_KEY
+    
+    bot.save(user_id, "user", message.text)
+    bot.increase_count(user_id)
+    
+    # هنا يتم استدعاء المنطق الخاص بالرد (بدلاً من دالة chat الملغاة)
+    bot_instance.reply_to(message, "تم استلام رسالتك وتخزينها في قاعدة البيانات.")
 
-async def vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "💎 نظام VIP\n\n"
-        "- استخدام غير محدود\n"
-        "- سرعة أعلى\n"
-        "- أولوية في الرد\n\n"
-        "للتفعيل تواصل مع الإدارة"
-    )
-from db import set_vip  # ضيفه فوق مع الاستيراد إذا مش موجود
-
-async def make_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    set_vip(user_id)
-    await update.message.reply_text("💎 تم تفعيل VIP لك")
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📊 البوت يعمل بشكل طبيعي")
-
-# =========================
-# 💬 الرسائل النصية
-# =========================
-
-async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    text = update.message.text
-
-    await context.bot.send_chat_action(
-        chat_id=update.effective_chat.id,
-        action="typing"
-    )
-
-    try:
-        reply = chat(user_id, text)
-        await update.message.reply_text(reply)
-    except Exception as e:
-        logging.error(e)
-        await update.message.reply_text("⚠️ حدث خطأ، حاول لاحقاً")
-
-# =========================
-# 📷 تحليل الصور (نسخة احترافية)
-# =========================
-
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        photo = update.message.photo[-1]
-        file = await photo.get_file()
-
-        image_path = "image.jpg"
-        await file.download_to_drive(image_path)
-
-        # 🔥 يعطي إحساس فوري
-        await context.bot.send_chat_action(
-            chat_id=update.effective_chat.id,
-            action="typing"
-        )
-
-        await update.message.reply_text("📷 جاري تحليل الصورة...")
-
-        # 🔥 يمنع تعليق البوت
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, analyze_image, image_path)
-
-        await update.message.reply_text(f"🧠 النتيجة:\n\n{result}")
-
-    except Exception as e:
-        logging.error(e)
-        await update.message.reply_text("⚠️ فشل تحليل الصورة")
-
-# =========================
-# 🚀 تشغيل البوت
-# =========================
-
-def main():
-    print("🚀 BOT RUNNING")
-
-    app = Application.builder().token(BOT_TOKEN).build()
-
-    # أوامر
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("vip", vip))
-    app.add_handler(CommandHandler("stats", stats))
-    app.add_handler(CommandHandler("makevip", make_vip))
-    # نص
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
-
-    # 📷 صور
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-
-    app.run_polling()
-
+# تشغيل البوت
 if __name__ == "__main__":
-    main()
+    print("البوت يعمل الآن...")
+    bot_instance.polling()
