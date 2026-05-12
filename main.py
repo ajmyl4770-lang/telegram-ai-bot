@@ -1,11 +1,9 @@
-import telebot
 import os
-from gtts import gTTS
-from pydub import AudioSegment
-
+import telebot
 import config
 import database as db
 from ai import chat
+from gtts import gTTS
 
 bot = telebot.TeleBot(config.BOT_TOKEN)
 
@@ -13,122 +11,152 @@ user_mode = {}
 
 
 # =========================
-# Start
+# START
 # =========================
 @bot.message_handler(commands=['start'])
-def start(m):
-    uid = str(m.chat.id)
+def start(message):
+    user_id = str(message.chat.id)
 
-    db.create_user(uid)
+    db.create_user(user_id)
 
     bot.send_message(
-        m.chat.id,
-        "👋 أهلاً بك يا أبو جميل\n🤖 بوت AI احترافي",
+        message.chat.id,
+        "👋 أهلاً وسهلاً بك يا أبو جميل 🌟\n\n"
+        "🤖 أنا مساعدك الذكي المتطور.\n\n"
+        "📌 الأوامر:\n"
+        "/music - أغنية\n"
+        "/stats - إحصائيات\n"
+        "/clear - مسح الذاكرة\n\n"
+        "💬 فقط ارسل رسالتك وأنا أساعدك ✨"
     )
 
 
 # =========================
-# Clear
+# STATS
 # =========================
-@bot.message_handler(commands=['clear'])
-def clear(m):
-    uid = str(m.chat.id)
-
-    db.cur.execute("DELETE FROM messages WHERE user_id=?", (uid,))
-    db.conn.commit()
-
-    bot.reply_to(m, "🧹 تم مسح الذاكرة")
-
-
-# =========================
-# Music Mode
-# =========================
-@bot.message_handler(func=lambda m: True)
-def handle(m):
-
-    uid = str(m.chat.id)
-
-    db.create_user(uid)
-    db.reset_daily(uid)
-
-    user = db.get_user(uid)
+@bot.message_handler(commands=['stats'])
+def stats(message):
+    user_id = str(message.chat.id)
+    user = db.get_user(user_id)
 
     if not user:
-        user = (uid, 0, 0, 0)
-
-    if not db.is_vip(uid) and user[2] >= config.FREE_LIMIT:
-        bot.reply_to(m, "❌ انتهى الحد اليومي")
+        bot.reply_to(message, "لا يوجد بيانات")
         return
 
-    mode = user_mode.get(uid, "chat")
+    text = f"""
+📊 إحصائياتك:
 
-    # 🎵 MUSIC
-    if mode == "music":
-
-        bot.send_chat_action(m.chat.id, "upload_audio")
-
-        prompt = f"""
-اكتب أغنية راب عربية 8-12 سطر
-بدون مبالغة
-
-الموضوع:
-{m.text}
+👤 ID: {user_id}
+💬 الرسائل: {user[2]}
+⭐ VIP: {'نعم' if user[1] else 'لا'}
 """
 
-        try:
+    bot.reply_to(message, text)
+
+
+# =========================
+# CLEAR
+# =========================
+@bot.message_handler(commands=['clear'])
+def clear(message):
+    user_id = str(message.chat.id)
+
+    db.cur.execute("DELETE FROM messages WHERE user_id=?", (user_id,))
+    db.conn.commit()
+
+    bot.reply_to(message, "🧹 تم مسح الذاكرة")
+
+
+# =========================
+# MUSIC MODE
+# =========================
+@bot.message_handler(commands=['music'])
+def music_mode(message):
+    user_id = str(message.chat.id)
+    user_mode[user_id] = "music"
+
+    bot.reply_to(message, "🎵 اكتب فكرة الأغنية الآن")
+
+
+# =========================
+# MAIN HANDLER
+# =========================
+@bot.message_handler(func=lambda message: True)
+def handle(message):
+    user_id = str(message.chat.id)
+
+    try:
+        db.create_user(user_id)
+        db.reset_daily(user_id)
+
+        user = db.get_user(user_id)
+        if not user:
+            user = (user_id, 0, 0, 0)
+
+        # تحديد الوضع
+        mode = user_mode.get(user_id, "chat")
+
+        # =========================
+        # MUSIC MODE
+        # =========================
+        if mode == "music":
+
+            bot.send_chat_action(message.chat.id, "upload_audio")
+
+            prompt = f"""
+اكتب أغنية عربية قصيرة (8 إلى 12 سطر)
+أسلوب راب أو شعبي
+بدون مبالغة أو تكرار
+
+الموضوع:
+{message.text}
+"""
+
             lyrics = chat([{"role": "user", "content": prompt}])
 
-            # voice
+            # توليد صوت
+            file_path = f"{user_id}_song.mp3"
             tts = gTTS(text=lyrics, lang="ar")
-            voice_file = f"{uid}_voice.mp3"
-            tts.save(voice_file)
+            tts.save(file_path)
 
-            # beat
-            beat = AudioSegment.from_file("beat.mp3")
-            voice = AudioSegment.from_file(voice_file)
+            # إرسال الأغنية
+            with open(file_path, "rb") as audio:
+                bot.send_audio(
+                    message.chat.id,
+                    audio,
+                    title="🎵 AI Song",
+                    caption="🎧 تم إنشاء أغنية بالذكاء الاصطناعي"
+                )
 
-            voice = voice - 3
+            os.remove(file_path)
+            user_mode[user_id] = None
+            return
 
-            final = beat.overlay(voice)
+        # =========================
+        # CHAT MODE
+        # =========================
+        if not db.is_vip(user_id) and user[2] >= config.FREE_LIMIT:
+            bot.reply_to(message, "❌ وصلت الحد اليومي")
+            return
 
-            output = f"{uid}_song.mp3"
-            final.export(output, format="mp3")
+        history = db.history(user_id)
+        history.append({"role": "user", "content": message.text})
 
-            audio = open(output, "rb")
+        response = chat(history)
 
-            bot.send_audio(
-                m.chat.id,
-                audio,
-                title="🎵 AI Song"
-            )
+        db.save(user_id, "user", message.text)
+        db.save(user_id, "assistant", response)
+        db.increase_count(user_id)
 
-            audio.close()
+        bot.reply_to(message, response)
 
-            os.remove(voice_file)
-            os.remove(output)
-
-        except Exception as e:
-            print(e)
-            bot.reply_to(m, "⚠️ خطأ في الأغنية")
-
-        user_mode[uid] = None
-        return
-
-
-    # 💬 CHAT
-    history = db.history(uid)
-    history.append({"role": "user", "content": m.text})
-
-    bot.send_chat_action(m.chat.id, "typing")
-
-    res = chat(history)
-
-    db.save(uid, "user", m.text)
-    db.save(uid, "assistant", res)
-    db.increase_count(uid)
-
-    bot.reply_to(m, res)
+    except Exception as e:
+        print("ERROR:", e)
+        bot.reply_to(message, "⚠️ حصل خطأ")
 
 
-print("🤖 Bot Running...")
-bot.infinity_polling(skip_pending=True)
+# =========================
+# START BOT
+# =========================
+print("🤖 Bot is running...")
+bot.infinity_polling()
