@@ -1,38 +1,58 @@
 import os
 import telebot
-import bot  # استيراد ملف bot.py ككامل
+from groq import Groq
+import bot  # ملف إدارة قاعدة البيانات والمستخدمين
+import config # لاستخدام الإعدادات من ملف config.py
 
-# جلب المفاتيح من متغيرات البيئة في Railway بأمان
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+# جلب الإعدادات
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+bot_instance = telebot.TeleBot(os.getenv("BOT_TOKEN"))
+MODEL = "llama-3.3-70b-versatile"
 
-# تهيئة البوت
-bot_instance = telebot.TeleBot(BOT_TOKEN)
-
-# دالة التعامل مع الرسائل
 @bot_instance.message_handler(commands=['start'])
-def send_welcome(message):
+def start(message):
     user_id = str(message.chat.id)
-    bot.create_user(user_id) # استخدام دالة من ملف bot.py
-    bot_instance.reply_to(message, "مرحباً بك في البوت! أنا جاهز لمساعدتك.")
+    bot.create_user(user_id)
+    bot_instance.reply_to(message, "مرحباً بك! أنا بوت الذكاء الاصطناعي الخاص بمركز بن علي. كيف يمكنني مساعدتك اليوم؟")
 
 @bot_instance.message_handler(func=lambda message: True)
-def handle_message(message):
+def handle_ai_chat(message):
     user_id = str(message.chat.id)
     
-    # التحقق من المستخدم واليوم
+    # تحديث عداد الاستخدام اليومي
     bot.reset_daily(user_id)
+    user_data = bot.get_user(user_id)
     
-    # مثال لاستخدام الدوال التي في bot.py
-    # هنا يمكنك إضافة منطق الاتصال بـ Groq باستخدام GROQ_API_KEY
-    
-    bot.save(user_id, "user", message.text)
-    bot.increase_count(user_id)
-    
-    # هنا يتم استدعاء المنطق الخاص بالرد (بدلاً من دالة chat الملغاة)
-    bot_instance.reply_to(message, "تم استلام رسالتك وتخزينها في قاعدة البيانات.")
+    # التحقق من حد الاستخدام (20 رسالة مجانية)
+    if not bot.is_vip(user_id) and user_data[2] >= bot.FREE_LIMIT:
+        bot_instance.reply_to(message, "عذراً، لقد وصلت للحد الأقصى للرسائل المجانية اليوم (20 رسالة).")
+        return
 
-# تشغيل البوت
+    # جلب سجل المحادثة من قاعدة البيانات
+    messages_history = bot.history(user_id)
+    messages_history.append({"role": "user", "content": message.text})
+
+    try:
+        # إرسال الطلب لـ Groq
+        completion = client.chat.completions.create(
+            model=MODEL,
+            messages=messages_history,
+            temperature=0.7
+        )
+        
+        response_text = completion.choices[0].message.content
+        
+        # حفظ الرسالة والرد في قاعدة البيانات
+        bot.save(user_id, "user", message.text)
+        bot.save(user_id, "assistant", response_text)
+        bot.increase_count(user_id)
+        
+        bot_instance.reply_to(message, response_text)
+
+    except Exception as e:
+        bot_instance.reply_to(message, "حدث خطأ فني، يرجى المحاولة لاحقاً.")
+        print(f"Error: {e}")
+
 if __name__ == "__main__":
-    print("البوت يعمل الآن...")
+    print("البوت يعمل الآن بأمان...")
     bot_instance.polling()
