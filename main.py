@@ -1,184 +1,155 @@
 import telebot
+import time
+from telebot import types
+
 import config
 import database as db
 from ai import chat
-from telebot import types
-import time
 
 bot = telebot.TeleBot(config.BOT_TOKEN)
 
 user_mode = {}
-last_msg_time = {}
-
-
-# =========================
-# القائمة الرئيسية
-# =========================
-def main_menu():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-
-    markup.row("💬 دردشة", "🖼️ صورة")
-    markup.row("🎵 أغنية", "📊 إحصائياتي")
-    markup.row("🧹 مسح الذاكرة")
-
-    return markup
-
+last_msg = {}
 
 # =========================
-# /start
+# لوحة
+# =========================
+def menu():
+    m = types.ReplyKeyboardMarkup(resize_keyboard=True)
+
+    m.row("💬 دردشة", "🖼️ صورة")
+    m.row("🎵 أغنية", "📊 إحصائياتي")
+    m.row("🧹 مسح الذاكرة")
+
+    return m
+
+# =========================
+# start
 # =========================
 @bot.message_handler(commands=['start'])
 def start(message):
-
-    user_id = str(message.chat.id)
-
-    db.create_user(user_id)
+    uid = str(message.chat.id)
+    db.create_user(uid)
 
     bot.send_message(
         message.chat.id,
-        "👋 أهلاً وسهلاً بك يا أبو جميل 🌟\n\n🤖 أنا مساعدك الذكي.",
-        reply_markup=main_menu()
+        "👋 أهلاً بك يا أبو جميل\n🤖 بوت ذكاء اصطناعي احترافي",
+        reply_markup=menu()
     )
 
-
 # =========================
-# الأزرار
+# أزرار
 # =========================
 @bot.message_handler(func=lambda m: m.text == "💬 دردشة")
-def chat_mode(message):
-    user_mode[str(message.chat.id)] = "chat"
-    bot.reply_to(message, "💬 اكتب رسالتك")
-
+def chat_mode(m):
+    user_mode[str(m.chat.id)] = "chat"
+    bot.reply_to(m, "💬 أرسل رسالتك")
 
 @bot.message_handler(func=lambda m: m.text == "🖼️ صورة")
-def image_mode(message):
-    user_mode[str(message.chat.id)] = "image"
-    bot.reply_to(message, "🖼️ اكتب وصف الصورة")
-
+def img_mode(m):
+    user_mode[str(m.chat.id)] = "image"
+    bot.reply_to(m, "🖼️ أرسل وصف الصورة")
 
 @bot.message_handler(func=lambda m: m.text == "🎵 أغنية")
-def music_mode(message):
-    user_mode[str(message.chat.id)] = "music"
-    bot.reply_to(message, "🎵 اكتب فكرة الأغنية")
-
+def music_mode(m):
+    user_mode[str(m.chat.id)] = "music"
+    bot.reply_to(m, "🎵 أرسل فكرة الأغنية")
 
 @bot.message_handler(func=lambda m: m.text == "📊 إحصائياتي")
-def stats(message):
+def stats(m):
+    u = db.get_user(str(m.chat.id))
 
-    user_id = str(message.chat.id)
-    user = db.get_user(user_id)
-
-    if not user:
-        bot.reply_to(message, "لا يوجد بيانات")
+    if not u:
+        bot.reply_to(m, "لا يوجد بيانات")
         return
 
-    bot.reply_to(message,
-        f"📊 إحصائياتك:\n\n💬 الرسائل: {user[2]}\n⭐ VIP: {'نعم' if user[1] else 'لا'}"
+    bot.reply_to(m,
+        f"📊 الإحصائيات:\n\n💬 رسائل: {u[2]}\n⭐ VIP: {'نعم' if u[1] else 'لا'}"
     )
 
-
 @bot.message_handler(func=lambda m: m.text == "🧹 مسح الذاكرة")
-def clear(message):
+def clear(m):
+    uid = str(m.chat.id)
 
-    user_id = str(message.chat.id)
-
-    db.cur.execute("DELETE FROM messages WHERE user_id=?", (user_id,))
+    db.cur.execute("DELETE FROM messages WHERE user_id=?", (uid,))
     db.conn.commit()
 
-    bot.reply_to(message, "🧹 تم مسح الذاكرة")
-
+    bot.reply_to(m, "🧹 تم المسح")
 
 # =========================
 # الذكاء الاصطناعي
 # =========================
-@bot.message_handler(func=lambda message: True)
-def handle(message):
+@bot.message_handler(func=lambda m: True)
+def handle(m):
 
-    user_id = str(message.chat.id)
+    uid = str(m.chat.id)
 
     try:
+        db.create_user(uid)
+        db.reset_daily(uid)
 
-        # منع سبام بسيط
-        if user_id in last_msg_time:
-            if time.time() - last_msg_time[user_id] < 2:
-                return
-
-        last_msg_time[user_id] = time.time()
-
-        db.create_user(user_id)
-        db.reset_daily(user_id)
-
-        user = db.get_user(user_id)
+        user = db.get_user(uid)
 
         if not user:
-            user = (user_id, 0, 0, 0)
+            user = (uid, 0, 0, 0)
 
-        FREE_LIMIT = 20
-
-        if not db.is_vip(user_id) and user[2] >= FREE_LIMIT:
-            bot.reply_to(message, "❌ انتهى الحد اليومي")
+        if not db.is_vip(uid) and user[2] >= config.FREE_LIMIT:
+            bot.reply_to(m, "❌ انتهى الحد اليومي")
             return
 
-        mode = user_mode.get(user_id, "chat")
+        mode = user_mode.get(uid, "chat")
 
         # =========================
-        # الأغاني
+        # أغاني
         # =========================
         if mode == "music":
 
-            bot.send_chat_action(message.chat.id, "typing")
+            bot.send_chat_action(m.chat.id, "typing")
 
             prompt = f"""
-أنت كاتب أغاني عربي محترف (ليس شاعر عادي).
+اكتب أغنية عربية قوية بأسلوب راب أو شعبي.
 
-اكتب أغنية بأسلوب راب أو شعبي.
-
-- بدون مدح أشخاص
-- بدون مبالغة
-- 8 إلى 12 سطر
-- قصة أو إحساس واقعي
+8-12 سطر
+بدون مدح مبالغ فيه
 
 الموضوع:
-{message.text}
+{m.text}
 """
 
-            response = chat([{"role": "user", "content": prompt}])
+            res = chat([{"role": "user", "content": prompt}])
 
-            bot.reply_to(message, response)
+            bot.reply_to(m, res)
 
-            user_mode[user_id] = None
+            user_mode[uid] = None
             return
 
         # =========================
-        # الصور (مبدئي)
+        # صورة (وصف فقط)
         # =========================
         if mode == "image":
-
-            bot.reply_to(message, f"🖼️ جاري إنشاء صورة: {message.text}")
-
-            user_mode[user_id] = None
+            bot.reply_to(m, f"🖼️ وصف الصورة:\n{m.text}")
+            user_mode[uid] = None
             return
 
         # =========================
-        # الدردشة
+        # دردشة
         # =========================
-        history = db.history(user_id)
-        history.append({"role": "user", "content": message.text})
+        hist = db.history(uid)
+        hist.append({"role": "user", "content": m.text})
 
-        bot.send_chat_action(message.chat.id, "typing")
+        bot.send_chat_action(m.chat.id, "typing")
 
-        response = chat(history)
+        res = chat(hist)
 
-        db.save(user_id, "user", message.text)
-        db.save(user_id, "assistant", response)
-        db.increase_count(user_id)
+        db.save(uid, "user", m.text)
+        db.save(uid, "assistant", res)
+        db.increase_count(uid)
 
-        bot.reply_to(message, response)
+        bot.reply_to(m, res)
 
     except Exception as e:
         print("ERROR:", e)
-        bot.reply_to(message, "⚠️ خطأ مؤقت")
-
+        bot.reply_to(m, "⚠️ خطأ مؤقت")
 
 print("🤖 Bot is running...")
 bot.infinity_polling(skip_pending=True)
