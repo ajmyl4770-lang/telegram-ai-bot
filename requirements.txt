@@ -1,6 +1,4 @@
 pyTelegramBotAPI
 groq
-pillow
-pytesseract
-requests
-pip install gtts
+sqlite3
+gtts
