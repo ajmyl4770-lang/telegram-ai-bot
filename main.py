@@ -8,6 +8,7 @@ from gtts import gTTS
 bot = telebot.TeleBot(config.BOT_TOKEN)
 
 user_mode = {}
+user_style = {}
 
 
 # =========================
@@ -16,66 +17,44 @@ user_mode = {}
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = str(message.chat.id)
-
     db.create_user(user_id)
 
     bot.send_message(
         message.chat.id,
-        "👋 أهلاً وسهلاً بك يا أبو جميل 🌟\n\n"
-        "🤖 أنا مساعدك الذكي المتطور.\n\n"
-        "📌 الأوامر:\n"
-        "/music - أغنية\n"
-        "/stats - إحصائيات\n"
-        "/clear - مسح الذاكرة\n\n"
-        "💬 فقط ارسل رسالتك وأنا أساعدك ✨"
+        "👋 أهلاً بك يا أبو جميل\n\n"
+        "🤖 بوت احترافي للأغاني والذكاء الاصطناعي\n\n"
+        "🎵 /music خليجي\n"
+        "🎵 /music مصري\n"
+        "🎵 /music يمني\n"
+        "🎵 /music شيلات\n"
+        "📊 /stats\n"
+        "🧹 /clear"
     )
 
 
 # =========================
-# STATS
-# =========================
-@bot.message_handler(commands=['stats'])
-def stats(message):
-    user_id = str(message.chat.id)
-    user = db.get_user(user_id)
-
-    if not user:
-        bot.reply_to(message, "لا يوجد بيانات")
-        return
-
-    text = f"""
-📊 إحصائياتك:
-
-👤 ID: {user_id}
-💬 الرسائل: {user[2]}
-⭐ VIP: {'نعم' if user[1] else 'لا'}
-"""
-
-    bot.reply_to(message, text)
-
-
-# =========================
-# CLEAR
-# =========================
-@bot.message_handler(commands=['clear'])
-def clear(message):
-    user_id = str(message.chat.id)
-
-    db.cur.execute("DELETE FROM messages WHERE user_id=?", (user_id,))
-    db.conn.commit()
-
-    bot.reply_to(message, "🧹 تم مسح الذاكرة")
-
-
-# =========================
-# MUSIC MODE
+# MUSIC SELECT STYLE
 # =========================
 @bot.message_handler(commands=['music'])
-def music_mode(message):
+def music(message):
     user_id = str(message.chat.id)
-    user_mode[user_id] = "music"
 
-    bot.reply_to(message, "🎵 اكتب فكرة الأغنية الآن")
+    parts = message.text.split()
+
+    if len(parts) < 2:
+        bot.reply_to(message, "اكتب: /music خليجي أو مصري أو يمني أو شيلات")
+        return
+
+    style = parts[1].lower()
+
+    if style not in ["خليجي", "مصري", "يمني", "شيلات"]:
+        bot.reply_to(message, "اختر: خليجي / مصري / يمني / شيلات")
+        return
+
+    user_mode[user_id] = "music"
+    user_style[user_id] = style
+
+    bot.reply_to(message, f"🎵 اكتب فكرة الأغنية ({style}) الآن")
 
 
 # =========================
@@ -89,11 +68,6 @@ def handle(message):
         db.create_user(user_id)
         db.reset_daily(user_id)
 
-        user = db.get_user(user_id)
-        if not user:
-            user = (user_id, 0, 0, 0)
-
-        # تحديد الوضع
         mode = user_mode.get(user_id, "chat")
 
         # =========================
@@ -101,12 +75,17 @@ def handle(message):
         # =========================
         if mode == "music":
 
+            style = user_style.get(user_id, "خليجي")
+
             bot.send_chat_action(message.chat.id, "upload_audio")
 
             prompt = f"""
-اكتب أغنية عربية قصيرة (8 إلى 12 سطر)
-أسلوب راب أو شعبي
-بدون مبالغة أو تكرار
+اكتب أغنية عربية بأسلوب {style}
+
+- 10 إلى 14 سطر
+- بدون تكرار
+- كلمات قوية وموسيقى راب أو شعبية
+- مناسبة لأسلوب {style}
 
 الموضوع:
 {message.text}
@@ -114,31 +93,50 @@ def handle(message):
 
             lyrics = chat([{"role": "user", "content": prompt}])
 
-            # توليد صوت
-            file_path = f"{user_id}_song.mp3"
+            # ===== صوت =====
+            voice_file = f"{user_id}_voice.mp3"
             tts = gTTS(text=lyrics, lang="ar")
-            tts.save(file_path)
+            tts.save(voice_file)
 
-            # إرسال الأغنية
-            with open(file_path, "rb") as audio:
+            # ===== اختيار Beat =====
+            beat_map = {
+                "خليجي": "beats/gulf.mp3",
+                "مصري": "beats/egypt.mp3",
+                "يمني": "beats/yemen.mp3",
+                "شيلات": "beats/shilat.mp3"
+            }
+
+            beat_file = beat_map.get(style, "beats/gulf.mp3")
+
+            output_file = f"{user_id}_final.mp3"
+
+            # ===== دمج احترافي FFmpeg =====
+            os.system(f"""
+ffmpeg -y -i {beat_file} -i {voice_file} -filter_complex \
+"[1:a]volume=1.2[a1];[0:a][a1]amix=inputs=2:duration=longest" \
+-b:a 192k {output_file}
+""")
+
+            # ===== إرسال =====
+            with open(output_file, "rb") as audio:
                 bot.send_audio(
                     message.chat.id,
                     audio,
-                    title="🎵 AI Song",
-                    caption="🎧 تم إنشاء أغنية بالذكاء الاصطناعي"
+                    title=f"🎵 AI Song - {style}",
+                    caption="🔥 أغنية احترافية بالذكاء الاصطناعي"
                 )
 
-            os.remove(file_path)
+            # تنظيف
+            os.remove(voice_file)
+            os.remove(output_file)
+
             user_mode[user_id] = None
+            user_style[user_id] = None
             return
 
         # =========================
         # CHAT MODE
         # =========================
-        if not db.is_vip(user_id) and user[2] >= config.FREE_LIMIT:
-            bot.reply_to(message, "❌ وصلت الحد اليومي")
-            return
-
         history = db.history(user_id)
         history.append({"role": "user", "content": message.text})
 
@@ -146,7 +144,6 @@ def handle(message):
 
         db.save(user_id, "user", message.text)
         db.save(user_id, "assistant", response)
-        db.increase_count(user_id)
 
         bot.reply_to(message, response)
 
@@ -155,8 +152,5 @@ def handle(message):
         bot.reply_to(message, "⚠️ حصل خطأ")
 
 
-# =========================
-# START BOT
-# =========================
 print("🤖 Bot is running...")
 bot.infinity_polling()
