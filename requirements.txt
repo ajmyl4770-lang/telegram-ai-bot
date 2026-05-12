@@ -1,2 +1,6 @@
 pyTelegramBotAPI
+requests
+groq
 gtts
+pydub
+python-dotenv
