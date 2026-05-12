@@ -1,4 +1,3 @@
-import os
 import telebot
 import config
 import database as db
@@ -23,30 +22,36 @@ def start(message):
 def handle(message):
     user_id = str(message.chat.id)
 
-    db.create_user(user_id)
-    db.reset_daily(user_id)
+    try:
+        db.create_user(user_id)
+        db.reset_daily(user_id)
 
-    user = db.get_user(user_id)
+        user = db.get_user(user_id)
+        if not user:
+            user = (user_id, 0, 0, 0)
 
-    if not user:
-        user = (user_id, 0, 0, 0)
+        # حد الاستخدام (ثابت بدل config لتفادي الخطأ)
+        FREE_LIMIT = 20
 
-    # حد الاستخدام
-    if not db.is_vip(user_id) and user[1] >= config.FREE_LIMIT:
-        bot.reply_to(message, "❌ وصلت للحد اليومي (20 رسالة).")
-        return
+        if not db.is_vip(user_id) and user[1] >= FREE_LIMIT:
+            bot.reply_to(message, "❌ وصلت الحد اليومي (20 رسالة).")
+            return
 
-    history = db.history(user_id)
-    history.append({"role": "user", "content": message.text})
+        history = db.history(user_id)
+        history.append({"role": "user", "content": message.text})
 
-    response = chat(history)
+        response = chat(history)
 
-    db.save(user_id, "user", message.text)
-    db.save(user_id, "assistant", response)
-    db.increase_count(user_id)
+        db.save(user_id, "user", message.text)
+        db.save(user_id, "assistant", response)
+        db.increase_count(user_id)
 
-    bot.reply_to(message, response)
+        bot.reply_to(message, response)
+
+    except Exception as e:
+        print("ERROR:", e)
+        bot.reply_to(message, "⚠️ حدث خطأ مؤقت، حاول مرة ثانية.")
 
 
 print("🤖 Bot is running...")
-bot.polling()
+bot.infinity_polling(skip_pending=True)
