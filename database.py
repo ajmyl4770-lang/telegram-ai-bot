@@ -1,15 +1,12 @@
 import sqlite3
 import time
-from config import ADMIN_ID, FREE_LIMIT
+from config import ADMIN_ID
 
 conn = sqlite3.connect("bot.db", check_same_thread=False)
 cur = conn.cursor()
 
 MAX_HISTORY = 12
 
-# =========================
-# الجداول
-# =========================
 cur.execute("""
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
@@ -30,9 +27,6 @@ CREATE TABLE IF NOT EXISTS messages (
 
 conn.commit()
 
-# =========================
-# المستخدمين
-# =========================
 def create_user(user_id):
     cur.execute("SELECT user_id FROM users WHERE user_id=?", (user_id,))
     if not cur.fetchone():
@@ -47,27 +41,28 @@ def get_user(user_id):
     return cur.fetchone()
 
 def reset_daily(user_id):
-    user = get_user(user_id)
-    if user and time.time() - user[3] > 86400:
-        cur.execute("UPDATE users SET daily_count=0,last_reset=? WHERE user_id=?",
-                    (int(time.time()), user_id))
+    u = get_user(user_id)
+    if u and time.time() - u[3] > 86400:
+        cur.execute(
+            "UPDATE users SET daily_count=0,last_reset=? WHERE user_id=?",
+            (int(time.time()), user_id)
+        )
         conn.commit()
 
 def increase_count(user_id):
     if user_id == ADMIN_ID:
         return
 
-    cur.execute("UPDATE users SET daily_count=daily_count+1 WHERE user_id=?",
-                (user_id,))
+    cur.execute(
+        "UPDATE users SET daily_count=daily_count+1 WHERE user_id=?",
+        (user_id,)
+    )
     conn.commit()
 
 def is_vip(user_id):
-    user = get_user(user_id)
-    return user and user[1] == 1
+    u = get_user(user_id)
+    return u and u[1] == 1
 
-# =========================
-# الرسائل
-# =========================
 def save(user_id, role, text):
     cur.execute(
         "INSERT INTO messages VALUES (?,?,?,?)",
