@@ -1,8 +1,8 @@
-from gtts import gTTS
-import os
 import telebot
 import time
 from telebot import types
+from gtts import gTTS
+import os
 
 import config
 import database as db
@@ -13,49 +13,54 @@ bot = telebot.TeleBot(config.BOT_TOKEN)
 user_mode = {}
 last_msg = {}
 
+
 # =========================
 # لوحة
 # =========================
 def menu():
     m = types.ReplyKeyboardMarkup(resize_keyboard=True)
-
     m.row("💬 دردشة", "🖼️ صورة")
     m.row("🎵 أغنية", "📊 إحصائياتي")
     m.row("🧹 مسح الذاكرة")
-
     return m
+
 
 # =========================
 # start
 # =========================
 @bot.message_handler(commands=['start'])
-def start(message):
-    uid = str(message.chat.id)
+def start(m):
+    uid = str(m.chat.id)
+
     db.create_user(uid)
 
     bot.send_message(
-        message.chat.id,
-        "👋 أهلاً بك يا أبو جميل\n🤖 بوت ذكاء اصطناعي احترافي",
+        m.chat.id,
+        "👋 أهلاً بك يا أبو جميل\n🤖 نسخة احترافية من البوت",
         reply_markup=menu()
     )
 
+
 # =========================
-# أزرار
+# الأزرار
 # =========================
 @bot.message_handler(func=lambda m: m.text == "💬 دردشة")
 def chat_mode(m):
     user_mode[str(m.chat.id)] = "chat"
-    bot.reply_to(m, "💬 أرسل رسالتك")
+    bot.reply_to(m, "💬 اكتب رسالتك")
+
 
 @bot.message_handler(func=lambda m: m.text == "🖼️ صورة")
 def img_mode(m):
     user_mode[str(m.chat.id)] = "image"
-    bot.reply_to(m, "🖼️ أرسل وصف الصورة")
+    bot.reply_to(m, "🖼️ اكتب وصف الصورة")
+
 
 @bot.message_handler(func=lambda m: m.text == "🎵 أغنية")
 def music_mode(m):
     user_mode[str(m.chat.id)] = "music"
-    bot.reply_to(m, "🎵 أرسل فكرة الأغنية")
+    bot.reply_to(m, "🎵 اكتب فكرة الأغنية")
+
 
 @bot.message_handler(func=lambda m: m.text == "📊 إحصائياتي")
 def stats(m):
@@ -66,8 +71,9 @@ def stats(m):
         return
 
     bot.reply_to(m,
-        f"📊 الإحصائيات:\n\n💬 رسائل: {u[2]}\n⭐ VIP: {'نعم' if u[1] else 'لا'}"
+        f"📊 الرسائل: {u[2]}\n⭐ VIP: {'نعم' if u[1] else 'لا'}"
     )
+
 
 @bot.message_handler(func=lambda m: m.text == "🧹 مسح الذاكرة")
 def clear(m):
@@ -77,6 +83,7 @@ def clear(m):
     db.conn.commit()
 
     bot.reply_to(m, "🧹 تم المسح")
+
 
 # =========================
 # الذكاء الاصطناعي
@@ -102,59 +109,50 @@ def handle(m):
         mode = user_mode.get(uid, "chat")
 
         # =========================
-        # أغاني
+        # أغاني + صوت
         # =========================
         if mode == "music":
 
-    bot.send_chat_action(message.chat.id, "upload_audio")
+            bot.send_chat_action(m.chat.id, "upload_audio")
 
-    prompt = f"""
-اكتب أغنية عربية قصيرة بأسلوب راب أو شعبي.
-
-- 8 إلى 12 سطر
-- كلمات قوية
-- بدون تكرار
+            prompt = f"""
+اكتب أغنية عربية قوية (راب/شعبي)
+8-12 سطر
+بدون مبالغة
 
 الموضوع:
-{message.text}
+{m.text}
 """
 
-    response = chat([{"role": "user", "content": prompt}])
+            text = chat([{"role": "user", "content": prompt}])
 
-    # =========================
-    # تحويل النص إلى صوت
-    # =========================
-    try:
-        tts = gTTS(text=response, lang="ar")
-        file_path = f"{uid}.mp3"
-        tts.save(file_path)
+            try:
+                tts = gTTS(text=text, lang="ar")
+                file = f"{uid}.mp3"
+                tts.save(file)
 
-        audio = open(file_path, "rb")
+                audio = open(file, "rb")
 
-        bot.send_audio(
-            message.chat.id,
-            audio,
-            title="🎵 أغنيتك",
-            caption="🤖 تم إنشاؤها بواسطة البوت"
-        )
+                bot.send_audio(m.chat.id, audio)
 
-        audio.close()
-        os.remove(file_path)
+                audio.close()
+                os.remove(file)
 
-    except Exception as e:
-        print("AUDIO ERROR:", e)
-        bot.reply_to(message, response)
+            except:
+                bot.reply_to(m, text)
 
-    user_mode[uid] = None
-    return
-
-        # =========================
-        # صورة (وصف فقط)
-        # =========================
-        if mode == "image":
-            bot.reply_to(m, f"🖼️ وصف الصورة:\n{m.text}")
             user_mode[uid] = None
             return
+
+
+        # =========================
+        # صورة (وصف)
+        # =========================
+        if mode == "image":
+            bot.reply_to(m, f"🖼️ تم توليد وصف:\n{m.text}")
+            user_mode[uid] = None
+            return
+
 
         # =========================
         # دردشة
@@ -176,5 +174,6 @@ def handle(m):
         print("ERROR:", e)
         bot.reply_to(m, "⚠️ خطأ مؤقت")
 
-print("🤖 Bot is running...")
+
+print("🤖 Production Bot Running...")
 bot.infinity_polling(skip_pending=True)
