@@ -3,3 +3,4 @@ groq
 pillow
 pytesseract
 requests
+pip install gtts
