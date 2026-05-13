@@ -7,8 +7,9 @@ from gtts import gTTS
 import os
 import traceback
 
-# استيراد محرك الفيديو والصوت
-from moviepy.editor import AudioFileClip, ImageClip
+# الاستدعاءات الحديثة المتوافقة كلياً مع الإصدار الجديد لـ MoviePy ومنع خطأ الـ editor
+from moviepy.audio.io.AudioFileClip import AudioFileClip
+from moviepy.video.VideoClip import ImageClip
 
 bot = telebot.TeleBot(config.BOT_TOKEN, num_threads=4)
 
@@ -54,7 +55,7 @@ def stats(message):
     if not user:
         bot.reply_to(message, "⚠️ لا توجد بيانات مسجلة لك بعد.", reply_markup=main_keyboard())
         return
-    text = f"📊 إحصائياتك:\n\n👤 معرفك: {user_id}\n🔄 الاستخدام اليومي: {user[2]} رسائل\n⭐ VIP: {'نعم' if user[1] == 1 else 'لا'}"
+    text = f"📊 إحصائياتك:\n\n👤 معرفك: {user_id}\n🔄 الاستخدام اليومي: {user} رسائل\n⭐ VIP: {'نعم' if user == 1 else 'لا'}"
     bot.reply_to(message, text, reply_markup=main_keyboard())
 
 @bot.message_handler(func=lambda msg: msg.text == "🧹 مسح الذاكرة")
@@ -83,7 +84,6 @@ def handle(message):
         db.create_user(user_id)
         db.reset_daily(user_id)
 
-        # ================= وضع الصوت والفيديو =================
         if mode in ["music", "video"]:
             bot.send_chat_action(message.chat.id, "upload_audio")
             
@@ -98,33 +98,32 @@ def handle(message):
                 tts = gTTS(text=lyrics, lang="ar")
                 tts.save(audio_file)
 
-                # 1. إذا طلب صوت فقط
+                # 1. وضع الصوت فقط
                 if mode == "music":
                     with open(audio_file, "rb") as audio:
                         bot.send_audio(message.chat.id, audio, title="AI Song", caption=f"🎧 كلمات الأغنية:\n{lyrics}", reply_markup=main_keyboard())
                     if os.path.exists(audio_file): os.remove(audio_file)
                 
-                # 2. إذا طلب فيديو غنائي
+                # 2. وضع الفيديو الغنائي
                 elif mode == "video":
                     bg_image = "background.jpg"
                     
-                    # التحقق من وجود الصورة وصلاحية محرك الفيديو
                     if os.path.exists(bg_image):
                         try:
                             bot.send_chat_action(message.chat.id, "upload_video")
                             
                             audio_clip = AudioFileClip(audio_file)
-                            video_clip = ImageClip(bg_image).set_duration(audio_clip.duration)
-                            video_clip = video_clip.set_audio(audio_clip)
                             
-                            # تصدير الفيديو بإعدادات متوافقة برمجياً مع سيرفرات لينكس بدون واجهة جرافيك
+                            # استخدام دوال الجيل الجديد البرمجية .with_duration و .with_audio
+                            video_clip = ImageClip(bg_image).with_duration(audio_clip.duration)
+                            video_clip = video_clip.with_audio(audio_clip)
+                            
+                            # التصدير المتوافق مع الإصدار الحديث لـ MoviePy
                             video_clip.write_videofile(
                                 video_file, 
                                 fps=1, 
                                 codec="libx264", 
-                                audio_codec="aac", 
-                                logger=None,
-                                write_logfile=False
+                                audio_codec="aac"
                             )
                             
                             audio_clip.close()
@@ -138,12 +137,10 @@ def handle(message):
                             
                         except Exception as video_err:
                             print("Video Render Fail, falling back to Audio:", video_err)
-                            # نظام حماية تلقائي: إذا فشل تصدير الـ MP4 على السيرفر يرسلها كملف صوتي فوراً
                             with open(audio_file, "rb") as audio:
-                                bot.send_audio(message.chat.id, audio, title="AI Song (Audio Mode)", caption=f"🎧 تعذر إنتاج مرئي فتم إرسالها صوتياً.\n\n📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
+                                bot.send_audio(message.chat.id, audio, title="AI Song (Audio Mode)", caption=f"🎧 تعذر دمج الفيديو فتم إرسالها كصوت.\n\n📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
                             if os.path.exists(audio_file): os.remove(audio_file)
                     else:
-                        # إذا لم تكن الصورة مرفوعة في المستودع
                         with open(audio_file, "rb") as audio:
                             bot.send_audio(message.chat.id, audio, title="AI Song (Audio Mode)", caption=f"⚠️ يرجى رفع ملف صورة باسم `background.jpg` لتفعيل نظام الفيديو.\n\n📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
                         if os.path.exists(audio_file): os.remove(audio_file)
