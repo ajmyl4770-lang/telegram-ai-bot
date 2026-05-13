@@ -1,3 +1,4 @@
+
 [phases.setup]
 nixPkgs = ["...", "ffmpeg"]
 
@@ -5,7 +6,7 @@ nixPkgs = ["...", "ffmpeg"]
 cmds = [
     "python -m venv .venv",
     ".venv/bin/pip install --upgrade pip",
-    ".venv/bin/pip install pyTelegramBotAPI gTTS moviepy groq"
+    ".venv/bin/pip install pyTelegramBotAPI gTTS groq moviepy"
 ]
 
 [start]
