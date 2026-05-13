@@ -4,17 +4,26 @@ import config
 import database as db
 from ai import chat
 from image_ai import generate_image 
-from gtts import gTTS
 import os
 import traceback
+import asyncio
 
-# استدعاء مكتبة معالجة الوسائط الحديثة والمتوافقة مع السيرفر
+# استدعاء المحرك الصوتي البشري الاحترافي ومحرك الدمج
+import edge_tts
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 from moviepy.video.VideoClip import ImageClip
 from moviepy.audio.AudioClip import CompositeAudioClip
 
 bot = telebot.TeleBot(config.BOT_TOKEN, num_threads=4)
 user_mode = {}
+
+# دالة برمجية لتوليد الصوت البشري الطبيعي في الخلفية
+def generate_human_voice(text, output_path):
+    async def amain():
+        # استخدام صوت "شاكر" أو "ماجد" البشري الاحترافي بدلاً من روبوت جوجل
+        communicate = edge_tts.Communicate(text, "ar-YE-ShakerNeural" if "يمن" in text else "ar-SA-HamedNeural")
+        await communicate.save(output_path)
+    asyncio.run(amain())
 
 def main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -39,7 +48,7 @@ def start(message):
 def image_init(message):
     user_id = str(message.chat.id)
     user_mode[user_id] = "image"
-    bot.reply_to(message, "🎨 اكتب وصف الصورة التي تريد رسمها الآن (مثال: اسد في غابة خيالية):", reply_markup=types.ReplyKeyboardRemove())
+    bot.reply_to(message, "🎨 اكتب وصف الصورة التي تريد رسمها الآن:", reply_markup=types.ReplyKeyboardRemove())
 
 @bot.message_handler(func=lambda msg: msg.text == "🎵 إنشاء أغنية صوتاً")
 def music_init(message):
@@ -60,7 +69,7 @@ def stats(message):
     if not user:
         bot.reply_to(message, "⚠️ لا توجد بيانات مسجلة لك بعد.", reply_markup=main_keyboard())
         return
-    text = f"📊 إحصائياتك:\n\n👤 معرفك: {user_id}\n🔄 الاستخدام اليومي: {user[2]} رسائل\n⭐ VIP: {'نعم' if user[1] == 1 else 'لا'}"
+    text = f"📊 إحصائياتك:\n\n👤 معرفك: {user_id}\n🔄 الاستخدام اليومي: {user} رسائل\n⭐ VIP: {'نعم' if user == 1 else 'لا'}"
     bot.reply_to(message, text, reply_markup=main_keyboard())
 
 @bot.message_handler(func=lambda msg: msg.text == "🧹 مسح الذاكرة")
@@ -97,7 +106,7 @@ def handle(message):
             user_mode[user_id] = "chat"
             return
 
-        # ---------------- وضع الوسائط (صوت وفيديو) ----------------
+        # ---------------- وضع الوسائط (صوت وفيديو بشري احترافي) ----------------
         if mode in ["music", "video"]:
             bot.send_chat_action(message.chat.id, "upload_audio")
             prompt = f"اكتب كلمات قصيرة بأسلوب شيلة أو أغنية عربية من 4 أسطر فقط مقفاة وبدون حركات تشكيل عن: {text}"
@@ -108,19 +117,19 @@ def handle(message):
                 final_audio = f"{user_id}.mp3"
                 video_file = f"{user_id}.mp4"
 
-                tts = gTTS(text=lyrics, lang="ar")
-                tts.save(tts_file)
+                # توليد الصوت البشري الطبيعي بالكامل
+                generate_human_voice(lyrics, tts_file)
 
-                # دمج الموسيقى المرفوعة محلياً تلقائياً
-                bg_music_file = "shilat.mp3"
+                # اختيار اللحن (إذا لم يحدد المستخدم، يتم وضع شيلة كإيقاع افتراضي لحل مشكلة غياب الموسيقى)
+                bg_music_file = "shilat.mp3" 
                 lower_text = text.lower()
                 if "يمن" in lower_text: bg_music_file = "yemen.mp3"
                 elif "خليج" in lower_text: bg_music_file = "gulf.mp3"
-                elif "مصر" in lower_text: bg_music_file = "egypt.mp3"
+                elif "مصر" in lower_text or "مصري" in lower_text: bg_music_file = "egypt.mp3"
 
                 if os.path.exists(bg_music_file):
                     voice_clip = AudioFileClip(tts_file)
-                    bg_clip = AudioFileClip(bg_music_file).with_duration(voice_clip.duration).volumex(0.3)
+                    bg_clip = AudioFileClip(bg_music_file).with_duration(voice_clip.duration).volumex(0.2) # خفض الخلفية لبروز الصوت البشري
                     combined_audio = CompositeAudioClip([bg_clip, voice_clip])
                     combined_audio.write_audiofile(final_audio, logger=None)
                     voice_clip.close()
@@ -133,7 +142,7 @@ def handle(message):
 
                 if mode == "music":
                     with open(final_audio, "rb") as audio:
-                        bot.send_audio(message.chat.id, audio, title="AI Dynamic Track", caption=f"📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
+                        bot.send_audio(message.chat.id, audio, title="AI Human Track", caption=f"📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
                     if os.path.exists(final_audio): os.remove(final_audio)
                 
                 elif mode == "video":
@@ -150,11 +159,11 @@ def handle(message):
                             video_clip.close()
 
                             with open(video_file, "rb") as video:
-                                bot.send_video(message.chat.id, video, caption=f"🎬 فيديو جاهز!\n\n📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
+                                bot.send_video(message.chat.id, video, caption=f"🎬 فيديو الشيلة البشري جاهز!\n\n📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
                             if os.path.exists(video_file): os.remove(video_file)
                         except Exception as render_err:
                             with open(final_audio, "rb") as audio:
-                                bot.send_audio(message.chat.id, audio, title="AI Track", caption=f"🎵 تم إرسالها كصوت لتعذر دمج الفيديو بالسيرفر.\n\n📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
+                                bot.send_audio(message.chat.id, audio, title="AI Track", caption=f"🎵 تم إرسالها كصوت بشري مع اللحن لتعذر معالجة الفيديو.\n\n📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
                     else:
                         with open(final_audio, "rb") as audio:
                             bot.send_audio(message.chat.id, audio, title="AI Track", caption=f"⚠️ يرجى رفع صورة `background.jpg` لتفعيل الفيديو.\n\n📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
@@ -163,7 +172,7 @@ def handle(message):
 
             except Exception as media_err:
                 print("MEDIA ERR:", media_err)
-                bot.reply_to(message, "⚠️ فشل إنتاج وتراكب الوسائط، يرجى إعادة المحاولة.", reply_markup=main_keyboard())
+                bot.reply_to(message, "⚠️ فشل إنتاج وتراكب الوسائط البشري، أعد المحاولة لاحقاً.", reply_markup=main_keyboard())
 
             user_mode[user_id] = "chat"
             return
@@ -185,5 +194,5 @@ def handle(message):
         traceback.print_exc()
         bot.reply_to(message, "⚠️ واجه السيرفر مشكلة مؤقتة في معالجة طلبك.", reply_markup=main_keyboard())
 
-print("🤖 Bot Running Successfully with Local Audios...")
+print("🤖 Bot Running Successfully with Human Voices...")
 bot.infinity_polling(timeout=60, long_polling_timeout=60)
