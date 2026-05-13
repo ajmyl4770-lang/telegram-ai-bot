@@ -3,7 +3,7 @@ import time
 from config import ADMIN_ID
 
 DB_NAME = "bot.db"
-MAX_HISTORY = 12
+MAX_HISTORY = 6
 
 def get_db_connection():
     return sqlite3.connect(DB_NAME, timeout=10)
@@ -54,7 +54,7 @@ def reset_daily(user_id):
             conn.commit()
 
 def increase_count(user_id):
-    if user_id == ADMIN_ID:
+    if str(user_id) == str(ADMIN_ID):
         return
     with get_db_connection() as conn:
         cur = conn.cursor()
