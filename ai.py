@@ -10,6 +10,7 @@ def chat(messages):
             messages=messages,
             temperature=0.7
         )
+        # تصحيح الفهرس وجلب نص الرسالة بشكل سليم
         return response.choices[0].message.content
     except Exception as e:
         print("GROQ API INTERNAL ERROR:", e)
