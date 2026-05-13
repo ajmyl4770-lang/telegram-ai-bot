@@ -7,17 +7,14 @@ from gtts import gTTS
 import os
 import traceback
 
-# استدعاءات مكتبة MoviePy المتوافقة مع الإصدار الجديد 2.0+ لمنع خطأ ModuleNotFoundError
-from moviepy.audio.io.AudioFileClip import AudioFileClip
-from moviepy.video.VideoClip import ImageClip
+# استيراد محرك الفيديو والصوت
+from moviepy.editor import AudioFileClip, ImageClip
 
-# تفعيل التعدد الخيطي بشكل آمن مع 4 خيوط معالجة لسرعة الاستجابة على Railway
 bot = telebot.TeleBot(config.BOT_TOKEN, num_threads=4)
 
 user_mode = {}
 
 def main_keyboard():
-    """توليد لوحة أزرار التحكم الرئيسية أسفل الشاشة للمستخدم"""
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     btn_chat = types.KeyboardButton("💬 دردشة ذكية")
     btn_music = types.KeyboardButton("🎵 إنشاء أغنية صوتاً")
@@ -28,25 +25,16 @@ def main_keyboard():
     return markup
 
 # =========================
-# START COMMAND
+# COMMANDS
 # =========================
 @bot.message_handler(commands=['start'])
 def start(message):
     user_id = str(message.chat.id)
     db.create_user(user_id)
     user_mode[user_id] = "chat"
-
-    text = """
-👋 أهلاً بك يا أبو جميل 🌟
-🤖 مركز بن علي للذكاء الصناعي برتبته الجديدة!
-
-📌 تصفح الخدمات عبر الأزرار أدناه للبدء مباشرة.
-"""
+    text = "👋 أهلاً بك يا أبو جميل 🌟\n🤖 مركز بن علي للذكاء الصناعي جاهز لخدمتك!\n\n📌 تصفح الخدمات عبر الأزرار أدناه للبدء مباشرة."
     bot.send_message(message.chat.id, text, reply_markup=main_keyboard())
 
-# =========================
-# CONTROLS VIA BUTTONS
-# =========================
 @bot.message_handler(func=lambda msg: msg.text == "🎵 إنشاء أغنية صوتاً")
 def music_init(message):
     user_id = str(message.chat.id)
@@ -74,13 +62,13 @@ def clear_history(message):
     user_id = str(message.chat.id)
     db.clear_user_messages(user_id) 
     user_mode[user_id] = "chat"
-    bot.reply_to(message, "🧹 تم تصفير الذاكرة بنجاح والأزرار جاهزة.", reply_markup=main_keyboard())
+    bot.reply_to(message, "🧹 تم تصفير الذاكرة بنجاح.", reply_markup=main_keyboard())
 
 @bot.message_handler(func=lambda msg: msg.text == "💬 دردشة ذكية")
 def set_chat_mode(message):
     user_id = str(message.chat.id)
     user_mode[user_id] = "chat"
-    bot.reply_to(message, "💬 وضع الدردشة نشط الآن، تفضل بإرسال سؤالك مباشرة.", reply_markup=main_keyboard())
+    bot.reply_to(message, "💬 وضع الدردشة نشط الآن.", reply_markup=main_keyboard())
 
 # =========================
 # MAIN TEXT HANDLER
@@ -95,48 +83,70 @@ def handle(message):
         db.create_user(user_id)
         db.reset_daily(user_id)
 
-        # ================= وضع الصوت أو الفيديو =================
+        # ================= وضع الصوت والفيديو =================
         if mode in ["music", "video"]:
-            bot.send_chat_action(message.chat.id, "upload_video" if mode == "video" else "upload_audio")
-            prompt = f"اكتب كلمات قوية ولحن منظم من 6 أسطر فقط.\nالستايل المطلوبة: {text}\nاكتب الكلمات مباشرة بدون مقدمات."
+            bot.send_chat_action(message.chat.id, "upload_audio")
+            
+            prompt = f"اكتب كلمات قوية شيلة أو أغنية عربية منظمة ومقفاة من 6 أسطر فقط عن موضوع: {text}. اكتب الكلمات مباشرة وبدون أي مقدمات أو هوامش."
 
             try:
                 lyrics = chat([{"role": "user", "content": prompt}])
                 audio_file = f"{user_id}.mp3"
                 video_file = f"{user_id}.mp4"
 
-                # 1. إنشاء الملف الصوتي الأساسي عبر gTTS
+                # توليد الصوت عبر gTTS
                 tts = gTTS(text=lyrics, lang="ar")
                 tts.save(audio_file)
 
-                # إذا طلب المستخدم ملف صوتي فقط
+                # 1. إذا طلب صوت فقط
                 if mode == "music":
                     with open(audio_file, "rb") as audio:
                         bot.send_audio(message.chat.id, audio, title="AI Song", caption=f"🎧 كلمات الأغنية:\n{lyrics}", reply_markup=main_keyboard())
-                    os.remove(audio_file)
+                    if os.path.exists(audio_file): os.remove(audio_file)
                 
-                # إذا طلب المستخدم مقطع فيديو كامل
+                # 2. إذا طلب فيديو غنائي
                 elif mode == "video":
                     bg_image = "background.jpg"
+                    
+                    # التحقق من وجود الصورة وصلاحية محرك الفيديو
                     if os.path.exists(bg_image):
-                        audio_clip = AudioFileClip(audio_file)
-                        
-                        # استخدام الدوال الجديدة المتوافقة مع تحديث MoviePy 2.0+ (.with_duration)
-                        video_clip = ImageClip(bg_image).with_duration(audio_clip.duration)
-                        video_clip = video_clip.with_audio(audio_clip)
-                        
-                        # معالجة وتصدير الفيديو بصيغة MP4 خفيفة وسريعة للبوتات
-                        video_clip.write_videofile(video_file, fps=2, codec="libx264", audio_codec="aac", logger=None)
-                        
-                        audio_clip.close()
-                        video_clip.close()
+                        try:
+                            bot.send_chat_action(message.chat.id, "upload_video")
+                            
+                            audio_clip = AudioFileClip(audio_file)
+                            video_clip = ImageClip(bg_image).set_duration(audio_clip.duration)
+                            video_clip = video_clip.set_audio(audio_clip)
+                            
+                            # تصدير الفيديو بإعدادات متوافقة برمجياً مع سيرفرات لينكس بدون واجهة جرافيك
+                            video_clip.write_videofile(
+                                video_file, 
+                                fps=1, 
+                                codec="libx264", 
+                                audio_codec="aac", 
+                                logger=None,
+                                write_logfile=False
+                            )
+                            
+                            audio_clip.close()
+                            video_clip.close()
 
-                        with open(video_file, "rb") as video:
-                            bot.send_video(message.chat.id, video, caption=f"🎬 الفيديو الغنائي جاهز!\n\n📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
-                        os.remove(video_file)
+                            with open(video_file, "rb") as video:
+                                bot.send_video(message.chat.id, video, caption=f"🎬 الفيديو الغنائي جاهز!\n\n📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
+                            
+                            if os.path.exists(video_file): os.remove(video_file)
+                            if os.path.exists(audio_file): os.remove(audio_file)
+                            
+                        except Exception as video_err:
+                            print("Video Render Fail, falling back to Audio:", video_err)
+                            # نظام حماية تلقائي: إذا فشل تصدير الـ MP4 على السيرفر يرسلها كملف صوتي فوراً
+                            with open(audio_file, "rb") as audio:
+                                bot.send_audio(message.chat.id, audio, title="AI Song (Audio Mode)", caption=f"🎧 تعذر إنتاج مرئي فتم إرسالها صوتياً.\n\n📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
+                            if os.path.exists(audio_file): os.remove(audio_file)
                     else:
-                        bot.reply_to(message, "⚠️ يرجى إضافة ملف صورة باسم `background.jpg` في مشروعك ليعمل نظام الفيديو بكفاءة.", reply_markup=main_keyboard())
-                    os.remove(audio_file)
+                        # إذا لم تكن الصورة مرفوعة في المستودع
+                        with open(audio_file, "rb") as audio:
+                            bot.send_audio(message.chat.id, audio, title="AI Song (Audio Mode)", caption=f"⚠️ يرجى رفع ملف صورة باسم `background.jpg` لتفعيل نظام الفيديو.\n\n📝 الكلمات:\n{lyrics}", reply_markup=main_keyboard())
+                        if os.path.exists(audio_file): os.remove(audio_file)
 
             except Exception as e:
                 print("MEDIA GENERATION ERROR:", e)
@@ -154,7 +164,7 @@ def handle(message):
             response = chat(history)
         except Exception as e:
             print("AI ERROR:", e)
-            response = "⚠️ الذكاء الاصطناعي مشغول حالياً، حاول مجدداً لاحقاً."
+            response = "⚠️ الذكاء الاصطناعي مشغول حالياً"
 
         db.save(user_id, "user", text)
         db.save(user_id, "assistant", response)
@@ -167,8 +177,5 @@ def handle(message):
         traceback.print_exc()
         bot.reply_to(message, "⚠️ حدث خطأ مؤقت أثناء معالجة رسالتك.", reply_markup=main_keyboard())
 
-# =========================
-# RUN BOT
-# =========================
 print("🤖 Bot Running Successfully...")
 bot.infinity_polling(timeout=60, long_polling_timeout=60)
