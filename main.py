@@ -3,7 +3,6 @@ import config
 import database as db
 from ai import chat
 from gtts import gTTS
-from pydub import AudioSegment
 import os
 
 bot = telebot.TeleBot(config.BOT_TOKEN)
