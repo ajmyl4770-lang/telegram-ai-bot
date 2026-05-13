@@ -1,4 +1,5 @@
 import telebot
+from telebot import types
 import config
 import database as db
 from ai import chat
@@ -6,237 +7,158 @@ from gtts import gTTS
 import os
 import traceback
 
-bot = telebot.TeleBot(config.BOT_TOKEN)
+# تفعيل التعدد الخيطي بشكل آمن
+bot = telebot.TeleBot(config.BOT_TOKEN, num_threads=4)
 
 user_mode = {}
+
+# دالة لتوليد لوحة الأزرار الرئيسية
+def main_keyboard():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    btn_chat = types.KeyboardButton("💬 دردشة ذكية")
+    btn_music = types.KeyboardButton("🎵 إنشاء أغنية")
+    btn_stats = types.KeyboardButton("📊 الإحصائيات")
+    btn_clear = types.KeyboardButton("🧹 مسح الذاكرة")
+    markup.add(btn_chat, btn_music, btn_stats, btn_clear)
+    return markup
 
 # =========================
 # START
 # =========================
 @bot.message_handler(commands=['start'])
 def start(message):
-
     user_id = str(message.chat.id)
-
     db.create_user(user_id)
+    user_mode[user_id] = "chat"
 
-    text = f"""
+    text = """
 👋 أهلاً بك يا أبو جميل 🌟
 
-🤖 مركز بن علي للذكاء الصناعي
+🤖 مركز بن علي للذكاء الصناعي برتبته الجديدة!
 
-📌 الخدمات:
-
-💬 دردشة ذكية
-🎵 /music إنشاء أغنية
-📊 /stats الإحصائيات
-🧹 /clear مسح الذاكرة
-
-✨ أرسل أي رسالة للبدء
+📌 تصفح الخدمات عبر الأزرار أدناه للبدء مباشرة.
 """
-
-    bot.send_message(message.chat.id, text)
+    bot.send_message(message.chat.id, text, reply_markup=main_keyboard())
 
 # =========================
-# MUSIC
+# CONTROLS VIA BUTTONS / COMMANDS
 # =========================
-@bot.message_handler(commands=['music'])
-def music(message):
-
+@bot.message_handler(func=lambda msg: msg.text in ["🎵 إنشاء أغنية", "/music"])
+def music_init(message):
     user_id = str(message.chat.id)
-
     user_mode[user_id] = "music"
-
+    
+    # إزالة الأزرار مؤقتاً ليركز المستخدم على كتابة الفكرة
+    remove_rm = types.ReplyKeyboardRemove()
     bot.reply_to(
         message,
-        "🎵 اكتب فكرة الأغنية\nمثال:\nشيلة حماس\nراب يمني\nاغنية حب"
+        "🎵 اكتب فكرة الأغنية الآن (مثال: شيلة حماس، راب يمني، أغنية حب):",
+        reply_markup=remove_rm
     )
 
-# =========================
-# STATS
-# =========================
-@bot.message_handler(commands=['stats'])
+@bot.message_handler(func=lambda msg: msg.text in ["📊 الإحصائيات", "/stats"])
 def stats(message):
-
     user_id = str(message.chat.id)
-
     user = db.get_user(user_id)
 
     if not user:
-        bot.reply_to(message, "لا يوجد بيانات")
+        bot.reply_to(message, "⚠️ لا توجد بيانات مسجلة لك بعد.")
         return
 
     text = f"""
-📊 إحصائياتك:
+📊 إحصائياتك الحالية:
 
-👤 ID: {user_id}
-💬 الرسائل: {user[2]}
-⭐ VIP: {'نعم' if user[1] else 'لا'}
+👤 معرفك: {user_id}
+💬 عدد الرسائل: {user[2]}
+⭐ حساب VIP: {'نعم' if user[1] else 'لا'}
 """
+    bot.reply_to(message, text, reply_markup=main_keyboard())
 
-    bot.reply_to(message, text)
-
-# =========================
-# CLEAR
-# =========================
-@bot.message_handler(commands=['clear'])
-def clear(message):
-
+@bot.message_handler(func=lambda msg: msg.text in ["🧹 مسح الذاكرة", "/clear"])
+def clear_history(message):
     user_id = str(message.chat.id)
+    
+    # أداء الاستعلام داخل ملف database لحماية الخيوط البرمجية
+    db.clear_user_messages(user_id) 
+    user_mode[user_id] = "chat"
 
-    db.cur.execute(
-        "DELETE FROM messages WHERE user_id=?",
-        (user_id,)
-    )
+    bot.reply_to(message, "🧹 تم مسح ذاكرة المحادثة بنجاح والأزرار جاهزة.", reply_markup=main_keyboard())
 
-    db.conn.commit()
-
-    bot.reply_to(message, "🧹 تم مسح المحادثة")
+@bot.message_handler(func=lambda msg: msg.text == "💬 دردشة ذكية")
+def set_chat_mode(message):
+    user_id = str(message.chat.id)
+    user_mode[user_id] = "chat"
+    bot.reply_to(message, "💬 وضع الدردشة نشط الآن، تفضل بإرسال سؤالك.", reply_markup=main_keyboard())
 
 # =========================
-# MAIN
+# MAIN TEXT HANDLER
 # =========================
 @bot.message_handler(func=lambda message: True)
 def handle(message):
-
     user_id = str(message.chat.id)
-
     text = message.text
+    mode = user_mode.get(user_id, "chat")
 
     try:
-
         db.create_user(user_id)
-
         db.reset_daily(user_id)
 
-        mode = user_mode.get(user_id, "chat")
-
-        # ================= MUSIC =================
+        # ================= وضع الموسيقى =================
         if mode == "music":
+            bot.send_chat_action(message.chat.id, "upload_audio")
 
-            bot.send_chat_action(
-                message.chat.id,
-                "upload_audio"
-            )
-
-            prompt = f"""
-اكتب أغنية عربية قوية من 8 إلى 12 سطر
-
-الستايل:
-- راب
-- شيلات
-- شعبي
-- خليجي
-- يمني
-
-بدون مبالغة
-بدون تكرار
-
-الموضوع:
-{text}
-"""
+            prompt = f"اكتب أغنية عربية قوية من 8 إلى 12 سطر.\nالستايل: راب، شيلات، شعبي، خليجي، يمني.\nبدون مبالغة وتكرار.\nالموضوع:\n{text}"
 
             try:
-
-                lyrics = chat([
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ])
-
+                lyrics = chat([{"role": "user", "content": prompt}])
                 file_name = f"{user_id}.mp3"
 
-                tts = gTTS(
-                    text=lyrics,
-                    lang="ar"
-                )
-
+                tts = gTTS(text=lyrics, lang="ar")
                 tts.save(file_name)
 
-                audio = open(file_name, "rb")
-
-                bot.send_audio(
-                    message.chat.id,
-                    audio,
-                    title="🎵 AI Song",
-                    caption="🎧 تم إنشاء الأغنية"
-                )
-
-                audio.close()
+                with open(file_name, "rb") as audio:
+                    bot.send_audio(
+                        message.chat.id,
+                        audio,
+                        title="🎵 AI Song",
+                        caption="🎧 تم إنشاء كلمات اللحن الصوتي بنجاح!",
+                        reply_markup=main_keyboard()
+                    )
 
                 os.remove(file_name)
 
             except Exception as e:
-
-                print("MUSIC ERROR:")
-                print(e)
+                print("MUSIC ERROR:", e)
                 traceback.print_exc()
+                bot.reply_to(message, "⚠️ حدث خطأ أثناء معالجة الملف الصوتي.", reply_markup=main_keyboard())
 
-                bot.reply_to(
-                    message,
-                    "⚠️ حدث خطأ أثناء إنشاء الأغنية"
-                )
-
-            user_mode[user_id] = None
-
+            user_mode[user_id] = "chat"
             return
 
-        # ================= CHAT =================
-
+        # ================= وضع الدردشة =================
         history = db.history(user_id)
-
-        history.append({
-            "role": "user",
-            "content": text
-        })
+        history.append({"role": "user", "content": text})
 
         try:
-
             response = chat(history)
-
         except Exception as e:
-
-            print("AI ERROR:")
-            print(e)
+            print("AI ERROR:", e)
             traceback.print_exc()
-
-            response = "⚠️ الذكاء الاصطناعي مشغول حالياً"
+            response = "⚠️ الذكاء الاصطناعي مشغول حالياً، يرجى المحاولة لاحقاً."
 
         db.save(user_id, "user", text)
-
         db.save(user_id, "assistant", response)
-
         db.increase_count(user_id)
 
-        bot.reply_to(message, response)
+        bot.reply_to(message, response, reply_markup=main_keyboard())
 
     except Exception as e:
-
-        print("MAIN ERROR:")
-        print(e)
+        print("MAIN ERROR:", e)
         traceback.print_exc()
-
-        bot.reply_to(
-            message,
-            "⚠️ حدث خطأ مؤقت"
-        )
+        bot.reply_to(message, "⚠️ حدث خطأ غير متوقع.", reply_markup=main_keyboard())
 
 # =========================
-# RUN
+# RUN BOT
 # =========================
-print("🤖 Bot Running...")
-
-while True:
-
-    try:
-
-        bot.infinity_polling(
-            timeout=60,
-            long_polling_timeout=60
-        )
-
-    except Exception as e:
-
-        print("POLLING ERROR:")
-        print(e)
+print("🤖 Bot Running Successfully...")
+bot.infinity_polling(timeout=60, long_polling_timeout=60)
