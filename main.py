@@ -29,7 +29,7 @@ def handle_ai_chat(message):
         database.create_user(user_id)
         user_data = database.get_user(user_id)
 
-    # التحقق من صلاحية الاستخدام للمستخدم
+    # التحقق من صلاحية الاستخدام للمخدم
     if not database.is_vip(user_id) and user_data[2] >= database.FREE_LIMIT:
         bot_instance.reply_to(
             message, 
@@ -42,6 +42,7 @@ def handle_ai_chat(message):
     chat_history.append({"role": "user", "content": message.text})
 
     try:
+        # الاتصال بـ Groq
         completion = client.chat.completions.create(
             model=config.MODEL,
             messages=chat_history,
@@ -58,8 +59,10 @@ def handle_ai_chat(message):
         bot_instance.reply_to(message, response_text)
 
     except Exception as e:
+        # تعديل لعرض تفاصيل الخطأ في السجلات البرمجية للمنصة لسهولة الفحص
+        error_message = str(e)
         bot_instance.reply_to(message, "حدث ضغط مؤقت على السيرفر، يرجى المحاولة مرة أخرى.")
-        print(f"Error: {e}")
+        print(f"GROQ API ERROR: {error_message}")
 
 if __name__ == "__main__":
     print("...البوت يعمل الآن بأمان وتوافق تام")
