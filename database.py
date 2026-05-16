@@ -1,30 +1,62 @@
-# مصفوفة تخزين السجل التاريخي في الذاكرة لتفادي انهيار البوت
-_chat_history_db = {}
+import sqlite3
+import time
 
-def get_user_history(user_id):
-    """قراءة مصفوفة السجل التاريخي للمستخدم بأمان"""
-    if user_id not in _chat_history_db:
-        _chat_history_db[user_id] = []
-    return _chat_history_db[user_id]
+# الاتصال بقاعدة البيانات
+conn = sqlite3.connect("users_data.db", check_same_thread=False)
+cur = conn.cursor()
 
-def save_to_history(user_id, role, content):
-    """إصلاح وحفظ البيانات في السجل مع تصفية رسائل الأخطاء"""
-    # منع دخول رسائل الأخطاء والرموز التحذيرية إلى الذاكرة التاريخية
-    if not content or "⚠️" in content or "فشل" in content:
-        return
-        
-    history = get_user_history(user_id)
-    
-    # تنسيق المصفوفة البرمجية بشكل صحيح ومقبول للمحرك
-    history.append({
-        "role": role,
-        "parts": [str(content)]
-    })
-    
-    # تحديث مصفوفة قاعدة البيانات
-    _chat_history_db[user_id] = history
+FREE_LIMIT = 20
+MAX_HISTORY = 12
 
-def clear_user_history(user_id):
-    """تفريغ السجل في حال رغبت في بدء جلسة جديدة نظيفة"""
-    if user_id in _chat_history_db:
-        _chat_history_db[user_id] = []
+# إنشاء الجداول
+cur.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    user_id TEXT PRIMARY KEY,
+    vip INTEGER DEFAULT 0,
+    daily_count INTEGER DEFAULT 0,
+    last_reset INTEGER
+)
+""")
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS history (
+    user_id TEXT,
+    role TEXT,
+    content TEXT,
+    timestamp INTEGER
+)
+""")
+conn.commit()
+
+def create_user(user_id):
+    cur.execute("SELECT user_id FROM users WHERE user_id=?", (user_id,))
+    if not cur.fetchone():
+        cur.execute("INSERT INTO users VALUES (?, 0, 0, ?)", (user_id, int(time.time())))
+        conn.commit()
+
+def get_user(user_id):
+    cur.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
+    return cur.fetchone()
+
+def reset_daily(user_id):
+    user = get_user(user_id)
+    if user and time.time() - user[3] > 86400:
+        cur.execute("UPDATE users SET daily_count=0, last_reset=? WHERE user_id=?", (int(time.time()), user_id))
+        conn.commit()
+
+def increase_count(user_id):
+    cur.execute("UPDATE users SET daily_count = daily_count + 1 WHERE user_id=?", (user_id,))
+    conn.commit()
+
+def is_vip(user_id):
+    user = get_user(user_id)
+    return user and user[1] == 1
+
+def save_chat(user_id, role, text):
+    cur.execute("INSERT INTO history VALUES (?, ?, ?, ?)", (user_id, role, text, int(time.time())))
+    conn.commit()
+
+def get_history(user_id):
+    cur.execute("SELECT role, content FROM history WHERE user_id=? ORDER BY rowid DESC LIMIT ?", (user_id, MAX_HISTORY))
+    rows = cur.fetchall()
+    return [{"role": r[0], "content": r[1]} for r in reversed(rows)]
