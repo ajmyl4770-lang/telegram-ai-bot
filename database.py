@@ -1,14 +1,14 @@
 import sqlite3
 import time
 
-# الاتصال بقاعدة البيانات
+# الاتصال بقاعدة البيانات المحلية
 conn = sqlite3.connect("users_data.db", check_same_thread=False)
 cur = conn.cursor()
 
 FREE_LIMIT = 20
 MAX_HISTORY = 12
 
-# إنشاء الجداول
+# إنشاء جداول المستخدمين والذاكرة
 cur.execute("""
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
