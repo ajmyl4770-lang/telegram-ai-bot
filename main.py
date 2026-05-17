@@ -64,6 +64,29 @@ def handle_ai_chat(message):
         bot_instance.reply_to(message, "حدث ضغط مؤقت على السيرفر، يرجى المحاولة مرة أخرى.")
         print(f"GROQ API ERROR: {error_message}")
 
+from flask import Flask, request
+
+app = Flask(__name__)
+
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+
+@app.route(f"/{config.BOT_TOKEN}", methods=["POST"])
+def webhook():
+    json_str = request.get_data().decode("UTF-8")
+    update = telebot.types.Update.de_json(json_str)
+    bot_instance.process_new_updates([update])
+    return "OK", 200
+
+@app.route("/")
+def index():
+    return "Bot is running!"
+
 if __name__ == "__main__":
-    print("...البوت يعمل الآن بأمان وتوافق تام")
-    bot_instance.polling(none_stop=True)
+    print("🚀 البوت يعمل بنظام Webhook")
+
+    bot_instance.remove_webhook()
+    bot_instance.set_webhook(
+        url=f"{WEBHOOK_URL}/{config.BOT_TOKEN}"
+    )
+
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
